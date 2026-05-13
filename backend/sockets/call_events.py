@@ -718,24 +718,30 @@ def register_call_events(socketio, app):
 
 def _handle_user_disconnect(user_id, socketio, app):
     """Called when a user's socket disconnects. Start grace period if in a call."""
+    partner_id = None
+    session_id = None
+
     with state_lock:
         _prune_stale_user_state(user_id)
         session_id = user_call_session.get(user_id)
 
         if not session_id:
             # Not in a tracked call session — clean up any pending call state
-            partner_id = active_calls.get(user_id)
-            _cleanup_call_tracking(user_id, partner_id)
+            pending_partner_id = active_calls.get(user_id)
+            _cleanup_call_tracking(user_id, pending_partner_id)
             return
 
-    session = call_sessions.get(session_id)
-    if not session:
-        return
+        session = call_sessions.get(session_id)
+        if not session:
+            return
 
-    partner_id = (
-        session['callee_id'] if session['caller_id'] == user_id
-        else session['caller_id']
-    )
+        partner_id = (
+            session['callee_id'] if session['caller_id'] == user_id
+            else session['caller_id']
+        )
+
+    if partner_id is None:
+        return
 
     # Notify partner that peer disconnected (grace period starts)
     partner_sid = get_user_sid(partner_id)

@@ -13,6 +13,38 @@ from backend.utils.response import success_response, error_response
 bookings_bp = Blueprint('bookings', __name__)
 
 
+def _parse_datetime(value):
+    """Parse ISO 8601 or MySQL datetime string → naive UTC datetime.
+
+    MySQL DATETIME columns reject the 'Z' suffix and milliseconds that
+    Flutter's DateTime.toUtc().toIso8601String() produces.
+    """
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    s = str(value).strip()
+    for fmt in (
+        '%Y-%m-%dT%H:%M:%S.%fZ',
+        '%Y-%m-%dT%H:%M:%SZ',
+        '%Y-%m-%dT%H:%M:%S.%f',
+        '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d',
+    ):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    # Strip timezone offset (+HH:MM or -HH:MM) and retry
+    if len(s) > 19 and (s[19] in ('+', '-') or s.endswith('Z')):
+        try:
+            return datetime.strptime(s[:19], '%Y-%m-%dT%H:%M:%S')
+        except ValueError:
+            pass
+    return None
+
+
 def _is_courier(booking_or_data):
     service = ''
     if isinstance(booking_or_data, dict):
@@ -104,7 +136,7 @@ def create(user):
         luggage_weight_lbs=data.get('luggage_weight_lbs'),
         luggage_description=data.get('luggage_description'),
         message=data.get('message'),
-        scheduled_at=data.get('scheduled_at'),
+        scheduled_at=_parse_datetime(data.get('scheduled_at')),
         customer_proposed_price=customer_proposed_price,
         status='pending',
         community_guidelines_accepted=guidelines_accepted,
@@ -169,7 +201,7 @@ def create_courier_batch(user):
             luggage_weight_lbs=int(parcel.get('luggage_weight_lbs', data.get('luggage_weight_lbs', 0)) or 0),
             luggage_description=parcel.get('luggage_description') or data.get('luggage_description'),
             message=parcel.get('message') or data.get('message'),
-            scheduled_at=parcel.get('scheduled_at') or data.get('scheduled_at'),
+            scheduled_at=_parse_datetime(parcel.get('scheduled_at') or data.get('scheduled_at')),
             customer_proposed_price=customer_price,
             status='pending',
             community_guidelines_accepted=True,

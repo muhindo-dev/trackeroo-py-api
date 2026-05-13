@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """WSGI entry point for production (Gunicorn with eventlet)."""
+import eventlet
+eventlet.monkey_patch()
+
 import os
 from dotenv import load_dotenv
 
