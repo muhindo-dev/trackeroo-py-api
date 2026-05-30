@@ -162,10 +162,23 @@ def become_driver(user):
                   'driving_license_issue_date', 'driving_license_validity',
                   'driving_license_issue_authority', 'automobile',
                   'is_car', 'is_boda', 'is_ambulance',
-                  'is_police', 'is_delivery', 'is_breakdown', 'is_firebrugade'):
+                  'is_police', 'is_delivery', 'is_breakdown', 'is_firebrugade',
+                  'vehicle_type', 'emergency_contact_name', 'emergency_contact_phone'):
         val = data.get(field)
         if val is not None:
             setattr(user, field, val)
+
+    # Boolean lifestyle declaration fields
+    for bool_field in ('uses_alcohol', 'uses_cigarettes', 'has_criminal_record'):
+        val = data.get(bool_field)
+        if val is not None:
+            setattr(user, bool_field, 1 if str(val).lower() in ('1', 'true', 'yes') else 0)
+
+    if data.get('years_of_experience') is not None:
+        try:
+            user.years_of_experience = int(data['years_of_experience'])
+        except (ValueError, TypeError):
+            pass
 
     # Handle driving license photo — Flutter sends it as "file" or "driving_license"
     photo_file = request.files.get('file') or request.files.get('driving_license') or request.files.get('photo')

@@ -3,6 +3,7 @@ from datetime import datetime
 from backend.models import db
 from backend.models.user import AdminUser
 from backend.models.negotiation import Negotiation
+from backend.models.popular_location import PopularLocation
 from backend.utils.auth import jwt_required_with_user
 from backend.utils.response import success_response, error_response
 
@@ -121,6 +122,28 @@ def update_location(user):
         'current_address': user.current_address,
         'updated_at': str(user.updated_at),
     })
+
+
+@location_bp.route('/api/locations/popular', methods=['GET'])
+def popular_locations():
+    """Public endpoint — return popular locations matching a search query.
+    Returns up to `limit` results (default 3) ordered by sort_order.
+    """
+    query = (request.args.get('query') or '').strip()
+    limit = min(int(request.args.get('limit', 3)), 10)
+
+    q = PopularLocation.query.filter_by(is_active=1).order_by(
+        PopularLocation.sort_order.asc(),
+        PopularLocation.name.asc(),
+    )
+    all_locs = q.all()
+
+    if query:
+        results = [loc for loc in all_locs if loc.matches(query)]
+    else:
+        results = all_locs
+
+    return success_response("Success", [loc.to_dict() for loc in results[:limit]])
 
 
 @location_bp.route('/api/important-contacts/update-location', methods=['POST'])

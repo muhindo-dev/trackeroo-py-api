@@ -17,6 +17,9 @@ from backend.models.chat_head import ChatHead
 from backend.models.chat_message import ChatMessage
 from backend.models.company import Company
 from backend.models.route_stage import RouteStage
+from backend.models.popular_location import PopularLocation
+from backend.models.service_rate import ServiceRate
+from backend.models.driver_rating import DriverRating
 from backend.utils.auth import admin_required, jwt_required_with_user
 from backend.utils.response import success_response, error_response
 
@@ -1200,4 +1203,153 @@ def system_counts(user):
         'chat_messages': ChatMessage.query.count(),
         'companies': Company.query.count(),
         'route_stages': RouteStage.query.count(),
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POPULAR LOCATIONS — Admin CRUD
+# ═══════════════════════════════════════════════════════════════════════════
+
+@admin_bp.route('/api/admin/popular-locations', methods=['GET'])
+@admin_required
+def list_popular_locations(user):
+    locs = PopularLocation.query.order_by(PopularLocation.sort_order, PopularLocation.name).all()
+    return success_response("Success", [l.to_dict() for l in locs])
+
+
+@admin_bp.route('/api/admin/popular-locations', methods=['POST'])
+@admin_required
+def create_popular_location(user):
+    data = request.get_json(silent=True) or request.form
+    if not data.get('name') or data.get('lat') is None or data.get('lng') is None:
+        return error_response("name, lat and lng are required")
+    loc = PopularLocation(
+        name=data['name'],
+        address=data.get('address'),
+        lat=data['lat'],
+        lng=data['lng'],
+        city=data.get('city', 'Toronto'),
+        category=data.get('category', 'Other'),
+        is_active=int(data.get('is_active', 1)),
+        sort_order=int(data.get('sort_order', 0)),
+    )
+    db.session.add(loc)
+    db.session.commit()
+    return success_response("Popular location created", loc.to_dict(), status_code=201)
+
+
+@admin_bp.route('/api/admin/popular-locations/<int:loc_id>', methods=['PUT'])
+@admin_required
+def update_popular_location(user, loc_id):
+    loc = PopularLocation.query.get_or_404(loc_id)
+    data = request.get_json(silent=True) or request.form
+    if data.get('name'):
+        loc.name = data['name']
+    if data.get('address') is not None:
+        loc.address = data['address']
+    if data.get('lat') is not None:
+        loc.lat = data['lat']
+    if data.get('lng') is not None:
+        loc.lng = data['lng']
+    if data.get('city'):
+        loc.city = data['city']
+    if data.get('category'):
+        loc.category = data['category']
+    if data.get('is_active') is not None:
+        loc.is_active = int(data['is_active'])
+    if data.get('sort_order') is not None:
+        loc.sort_order = int(data['sort_order'])
+    db.session.commit()
+    return success_response("Updated", loc.to_dict())
+
+
+@admin_bp.route('/api/admin/popular-locations/<int:loc_id>', methods=['DELETE'])
+@admin_required
+def delete_popular_location(user, loc_id):
+    loc = PopularLocation.query.get_or_404(loc_id)
+    db.session.delete(loc)
+    db.session.commit()
+    return success_response("Deleted")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SERVICE RATES — Admin CRUD
+# ═══════════════════════════════════════════════════════════════════════════
+
+@admin_bp.route('/api/admin/service-rates', methods=['GET'])
+@admin_required
+def list_service_rates(user):
+    rates = ServiceRate.query.order_by(ServiceRate.service_type, ServiceRate.vehicle_type).all()
+    return success_response("Success", [r.to_dict() for r in rates])
+
+
+@admin_bp.route('/api/admin/service-rates', methods=['POST'])
+@admin_required
+def create_service_rate(user):
+    data = request.get_json(silent=True) or request.form
+    if not data.get('service_type'):
+        return error_response("service_type is required")
+    rate = ServiceRate(
+        service_type=data['service_type'],
+        vehicle_type=data.get('vehicle_type', 'Any'),
+        base_rate_cad=float(data.get('base_rate_cad', 0)),
+        per_km_rate_cad=float(data.get('per_km_rate_cad', 0)),
+        per_minute_rate_cad=float(data.get('per_minute_rate_cad', 0)),
+        surge_multiplier=float(data.get('surge_multiplier', 1.0)),
+        minimum_fare_cad=float(data.get('minimum_fare_cad', 0)),
+        is_active=int(data.get('is_active', 1)),
+        notes=data.get('notes'),
+    )
+    db.session.add(rate)
+    db.session.commit()
+    return success_response("Service rate created", rate.to_dict(), status_code=201)
+
+
+@admin_bp.route('/api/admin/service-rates/<int:rate_id>', methods=['PUT'])
+@admin_required
+def update_service_rate(user, rate_id):
+    rate = ServiceRate.query.get_or_404(rate_id)
+    data = request.get_json(silent=True) or request.form
+    if data.get('service_type'):
+        rate.service_type = data['service_type']
+    if data.get('vehicle_type'):
+        rate.vehicle_type = data['vehicle_type']
+    for field in ('base_rate_cad', 'per_km_rate_cad', 'per_minute_rate_cad', 'surge_multiplier', 'minimum_fare_cad'):
+        if data.get(field) is not None:
+            setattr(rate, field, float(data[field]))
+    if data.get('is_active') is not None:
+        rate.is_active = int(data['is_active'])
+    if data.get('notes') is not None:
+        rate.notes = data['notes']
+    db.session.commit()
+    return success_response("Updated", rate.to_dict())
+
+
+@admin_bp.route('/api/admin/service-rates/<int:rate_id>', methods=['DELETE'])
+@admin_required
+def delete_service_rate(user, rate_id):
+    rate = ServiceRate.query.get_or_404(rate_id)
+    db.session.delete(rate)
+    db.session.commit()
+    return success_response("Deleted")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PUBLIC — Service Rate Estimate
+# ═══════════════════════════════════════════════════════════════════════════
+
+@admin_bp.route('/api/rates', methods=['GET'])
+def get_rate(user=None):
+    """Public endpoint — get fare estimate for a service+vehicle+distance combo."""
+    service_type = request.args.get('service_type', '')
+    vehicle_type = request.args.get('vehicle_type', 'Any')
+    distance_km = float(request.args.get('distance_km', 0) or 0)
+    duration_min = float(request.args.get('duration_min', 0) or 0)
+
+    estimate = ServiceRate.estimate_fare(service_type, vehicle_type, distance_km, duration_min)
+    rate = ServiceRate.get_rate(service_type, vehicle_type)
+
+    return success_response("Success", {
+        'rate': rate.to_dict() if rate else None,
+        'estimate': estimate,
     })

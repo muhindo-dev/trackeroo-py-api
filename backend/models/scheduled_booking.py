@@ -31,6 +31,7 @@ class ScheduledBooking(db.Model):
     passengers = db.Column(db.SmallInteger, default=1)
     luggage = db.Column(db.SmallInteger, default=0)
     luggage_weight_lbs = db.Column(db.Integer, default=0)
+    luggage_weight_kg = db.Column(db.Numeric(8, 2), default=0)
     luggage_description = db.Column(db.Text, nullable=True)
     message = db.Column(db.Text, nullable=True)
     scheduled_at = db.Column(db.DateTime, nullable=False)
@@ -80,6 +81,13 @@ class ScheduledBooking(db.Model):
     driver_notes = db.Column(db.Text, nullable=True)
     admin_notes = db.Column(db.Text, nullable=True)
 
+    # Enhanced fields (migration 0007)
+    expected_arrival_at = db.Column(db.DateTime, nullable=True)
+    driver_selected_by_customer = db.Column(db.SmallInteger, default=0)
+    distance_km = db.Column(db.Numeric(10, 3), default=0)
+    estimated_duration_minutes = db.Column(db.Integer, default=0)
+    agreed_price_cad = db.Column(db.Numeric(8, 2), default=0)
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -117,6 +125,7 @@ class ScheduledBooking(db.Model):
             'passengers': self.passengers,
             'luggage': self.luggage,
             'luggage_weight_lbs': self.luggage_weight_lbs,
+            'luggage_weight_kg': float(self.luggage_weight_kg or 0),
             'luggage_description': self.luggage_description,
             'message': self.message,
             'scheduled_at': my_date_time(self.scheduled_at),
@@ -147,6 +156,11 @@ class ScheduledBooking(db.Model):
             'cancellation_reason': self.cancellation_reason,
             'driver_notes': self.driver_notes,
             'admin_notes': self.admin_notes,
+            'expected_arrival_at': my_date_time(self.expected_arrival_at),
+            'driver_selected_by_customer': bool(self.driver_selected_by_customer),
+            'distance_km': float(self.distance_km or 0),
+            'estimated_duration_minutes': self.estimated_duration_minutes or 0,
+            'agreed_price_cad': float(self.agreed_price_cad or 0),
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),
         }

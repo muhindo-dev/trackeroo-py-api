@@ -527,3 +527,56 @@ def courier_batch_next(user, batch_id):
         'batch_id': batch_id,
         'next_booking': next_booking.to_dict(),
     })
+
+
+@bookings_bp.route('/api/bookings/<int:booking_id>/eta', methods=['PUT'])
+@jwt_required_with_user
+def set_eta(user, booking_id):
+    """Driver or admin sets expected arrival time for a booking."""
+    booking = ScheduledBooking.query.get_or_404(booking_id)
+
+    if user.id != 1 and booking.driver_id != user.id:
+        return error_response("Not authorized", status_code=403)
+
+    data = request.get_json(silent=True) or request.form
+    eta = _parse_datetime(data.get('expected_arrival_at'))
+    if not eta:
+        return error_response("expected_arrival_at is required (ISO 8601 format)")
+
+    booking.expected_arrival_at = eta
+    if data.get('distance_km') is not None:
+        booking.distance_km = float(data['distance_km'])
+    if data.get('estimated_duration_minutes') is not None:
+        booking.estimated_duration_minutes = int(data['estimated_duration_minutes'])
+
+    db.session.commit()
+    return success_response("ETA updated", booking.to_dict())
+
+
+@bookings_bp.route('/api/bookings/<int:booking_id>/select-driver', methods=['PUT'])
+@jwt_required_with_user
+def select_driver(user, booking_id):
+    """Customer or admin selects a driver for a pending booking."""
+    booking = ScheduledBooking.query.get_or_404(booking_id)
+
+    if user.id != 1 and booking.customer_id != user.id:
+        return error_response("Not authorized", status_code=403)
+
+    data = request.get_json(silent=True) or request.form
+    driver_id = int(data.get('driver_id', 0))
+    if not driver_id:
+        return error_response("driver_id is required")
+
+    driver = AdminUser.query.get(driver_id)
+    if not driver or driver.user_type not in ('Driver', 'Pending Driver'):
+        return error_response("Driver not found")
+
+    booking.driver_id = driver_id
+    booking.driver_selected_by_customer = 1 if booking.customer_id == user.id else 0
+    booking.assigned_by = user.id
+    booking.assigned_at = datetime.utcnow()
+    if booking.status == 'pending':
+        booking.status = 'assigned'
+
+    db.session.commit()
+    return success_response("Driver assigned", booking.to_dict())

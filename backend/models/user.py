@@ -72,6 +72,15 @@ class AdminUser(db.Model):
     current_longitude = db.Column(db.Numeric(11, 8), nullable=True)
     last_location_update = db.Column(db.DateTime, nullable=True)
 
+    # Vehicle & lifestyle declaration (added migration 0003)
+    vehicle_type = db.Column(db.String(50), nullable=True)
+    uses_alcohol = db.Column(db.SmallInteger, default=0)
+    uses_cigarettes = db.Column(db.SmallInteger, default=0)
+    has_criminal_record = db.Column(db.SmallInteger, default=0)
+    emergency_contact_name = db.Column(db.String(200), nullable=True)
+    emergency_contact_phone = db.Column(db.String(50), nullable=True)
+    years_of_experience = db.Column(db.SmallInteger, default=0)
+
     # Relationships
     wallet = db.relationship('UserWallet', backref='user', uselist=False, lazy=True)
     payout_account = db.relationship('PayoutAccount', backref='user', uselist=False, lazy=True)
@@ -148,6 +157,13 @@ class AdminUser(db.Model):
             'current_latitude': str(self.current_latitude) if self.current_latitude else None,
             'current_longitude': str(self.current_longitude) if self.current_longitude else None,
             'last_location_update': my_date_time(self.last_location_update),
+            'vehicle_type': self.vehicle_type,
+            'uses_alcohol': bool(self.uses_alcohol),
+            'uses_cigarettes': bool(self.uses_cigarettes),
+            'has_criminal_record': bool(self.has_criminal_record),
+            'emergency_contact_name': self.emergency_contact_name,
+            'emergency_contact_phone': self.emergency_contact_phone,
+            'years_of_experience': self.years_of_experience or 0,
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),
         }

@@ -20,3 +20,6 @@ from backend.models.trip_note import TripNote
 from backend.models.company import Company
 from backend.models.route_stage import RouteStage
 from backend.models.call_log import CallLog
+from backend.models.popular_location import PopularLocation
+from backend.models.service_rate import ServiceRate
+from backend.models.driver_rating import DriverRating
