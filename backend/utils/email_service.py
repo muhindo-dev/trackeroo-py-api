@@ -1,5 +1,5 @@
 """
-Email Service — NegoRide Canada
+Email Service — Truckeroo Nigeria
 Uses Python's built-in smtplib so no extra pip dependency is required.
 If MAIL_USERNAME is not configured, emails are printed to stdout (dev mode).
 """
@@ -21,7 +21,7 @@ def _send(to_address: str, subject: str, html_body: str) -> bool:
     port = current_app.config.get('MAIL_PORT', 587)
     use_tls = current_app.config.get('MAIL_USE_TLS', True)
     use_ssl = current_app.config.get('MAIL_USE_SSL', False)
-    from_name = current_app.config.get('MAIL_FROM_NAME', 'NegoRide Canada')
+    from_name = current_app.config.get('MAIL_FROM_NAME', 'Truckeroo Nigeria')
     from_addr = current_app.config.get('MAIL_FROM_ADDRESS', username)
 
     if not username or not password:
@@ -61,7 +61,7 @@ def _send(to_address: str, subject: str, html_body: str) -> bool:
 def send_verification_email(to_address: str, name: str, token: str) -> bool:
     """Send an account verification email with a clickable link."""
     app_url = current_app.config.get('APP_URL', 'http://localhost:5001')
-    app_name = current_app.config.get('APP_NAME', 'NegoRide Canada')
+    app_name = current_app.config.get('APP_NAME', 'Truckeroo Nigeria')
     verify_url = f'{app_url}/api/email/verify/{token}'
 
     subject = f'Verify your {app_name} account'
@@ -95,7 +95,7 @@ def send_verification_email(to_address: str, name: str, token: str) -> bool:
 def send_password_reset_email(to_address: str, name: str, token: str) -> bool:
     """Send a password reset email."""
     app_url = current_app.config.get('APP_URL', 'http://localhost:5001')
-    app_name = current_app.config.get('APP_NAME', 'NegoRide Canada')
+    app_name = current_app.config.get('APP_NAME', 'Truckeroo Nigeria')
     # The mobile app handles the deep link; we pass the raw token so the app can
     # open the ResetPasswordScreen directly via a custom URL scheme.
     reset_url = f'negoride://reset-password?token={token}'

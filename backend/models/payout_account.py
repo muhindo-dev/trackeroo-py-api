@@ -36,7 +36,7 @@ class PayoutAccount(db.Model):
 
     # Payout preferences
     default_payout_method = db.Column(db.Enum('standard', 'instant'), default='standard')
-    default_currency = db.Column(db.String(3), default='CAD')
+    default_currency = db.Column(db.String(3), default='NGN')
     minimum_payout_amount = db.Column(db.Numeric(10, 2), default=10.00)
 
     # Business info

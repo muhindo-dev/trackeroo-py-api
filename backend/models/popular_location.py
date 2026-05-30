@@ -10,7 +10,7 @@ class PopularLocation(db.Model):
     address = db.Column(db.String(500), nullable=True)
     lat = db.Column(db.Numeric(10, 7), nullable=False)
     lng = db.Column(db.Numeric(10, 7), nullable=False)
-    city = db.Column(db.String(100), default='Toronto')
+    city = db.Column(db.String(100), default='Lagos')
     category = db.Column(db.String(100), default='Other')
     is_active = db.Column(db.SmallInteger, default=1)
     sort_order = db.Column(db.Integer, default=0)

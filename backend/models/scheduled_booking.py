@@ -161,6 +161,8 @@ class ScheduledBooking(db.Model):
             'distance_km': float(self.distance_km or 0),
             'estimated_duration_minutes': self.estimated_duration_minutes or 0,
             'agreed_price_cad': float(self.agreed_price_cad or 0),
+            'agreed_price': float(self.agreed_price_cad or 0),
+            'currency': 'NGN',
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),
         }
