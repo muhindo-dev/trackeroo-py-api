@@ -88,6 +88,15 @@ class ScheduledBooking(db.Model):
     estimated_duration_minutes = db.Column(db.Integer, default=0)
     agreed_price_cad = db.Column(db.Numeric(8, 2), default=0)
 
+    # Flutterwave payment fields (migration 0009)
+    flw_tx_ref = db.Column(db.String(255), nullable=True, index=True)
+    flw_tx_id = db.Column(db.String(255), nullable=True)
+    flw_payment_url = db.Column(db.Text, nullable=True)
+    flw_payment_type = db.Column(db.String(100), nullable=True)
+    flw_payment_data = db.Column(db.JSON, nullable=True)
+    flw_verified_at = db.Column(db.DateTime, nullable=True)
+    amount_ngn = db.Column(db.Numeric(12, 2), default=0)
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -163,6 +172,12 @@ class ScheduledBooking(db.Model):
             'agreed_price_cad': float(self.agreed_price_cad or 0),
             'agreed_price': float(self.agreed_price_cad or 0),
             'currency': 'NGN',
+            'flw_tx_ref': self.flw_tx_ref,
+            'flw_tx_id': self.flw_tx_id,
+            'flw_payment_url': self.flw_payment_url,
+            'flw_payment_type': self.flw_payment_type,
+            'flw_verified_at': my_date_time(self.flw_verified_at),
+            'amount_ngn': float(self.amount_ngn or 0),
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),
         }

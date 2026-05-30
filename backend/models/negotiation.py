@@ -46,6 +46,13 @@ class Negotiation(db.Model):
     stripe_price_id = db.Column(db.String(255), nullable=True)
     stripe_paid = db.Column(db.String(10), default='No')
 
+    # Flutterwave fields (migration 0009)
+    flw_tx_ref = db.Column(db.String(255), nullable=True)
+    flw_tx_id = db.Column(db.String(255), nullable=True)
+    flw_payment_url = db.Column(db.Text, nullable=True)
+    flw_payment_type = db.Column(db.String(100), nullable=True)
+    flw_verified_at = db.Column(db.DateTime, nullable=True)
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
