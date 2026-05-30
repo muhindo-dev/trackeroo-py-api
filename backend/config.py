@@ -34,11 +34,22 @@ class Config:
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB max file upload
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 
-    # Stripe
-    STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
-    STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')
-    STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+    # Flutterwave (primary payment gateway)
+    FLW_SECRET_KEY = os.getenv('FLW_SECRET_KEY', '')
+    FLW_PUBLIC_KEY = os.getenv('FLW_PUBLIC_KEY', '')
+    FLW_ENCRYPTION_KEY = os.getenv('FLW_ENCRYPTION_KEY', '')
+    FLW_SECRET_HASH = os.getenv('FLW_SECRET_HASH', '')
+    FLW_BASE_URL = os.getenv('FLW_BASE_URL', 'https://api.flutterwave.com')
+    FLW_CURRENCY = os.getenv('FLW_CURRENCY', 'NGN')
+    FLW_PAYMENT_OPTIONS = os.getenv('FLW_PAYMENT_OPTIONS', 'card,banktransfer,ussd')
+    FLW_TIMEOUT = int(os.getenv('FLW_TIMEOUT', 30))
+
+    # Service fee
     SERVICE_FEE_PERCENTAGE = int(os.getenv('SERVICE_FEE_PERCENTAGE', 10))
+
+    # Stripe (legacy — kept for DB column compat, not used for new payments)
+    STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+    STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
 
     # OneSignal
     ONESIGNAL_APP_ID = os.getenv('ONESIGNAL_APP_ID', '56ef70cd-45a3-4a66-9838-3146fbbffe77')

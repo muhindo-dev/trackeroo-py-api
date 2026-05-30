@@ -10,11 +10,17 @@ class PayoutRequest(db.Model):
     user_id = db.Column(db.BigInteger, db.ForeignKey('admin_users.id'), nullable=False)
     payout_account_id = db.Column(db.BigInteger, db.ForeignKey('payout_accounts.id'), nullable=False)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
-    currency = db.Column(db.String(3), default='USD')
+    currency = db.Column(db.String(3), default='NGN')
     fee_amount = db.Column(db.Numeric(10, 2), default=0)
     net_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    status = db.Column(db.Enum('pending', 'processing', 'completed', 'failed', 'cancelled'), default='pending')
-    payout_method = db.Column(db.Enum('standard', 'instant'), default='standard')
+    status = db.Column(db.String(30), default='pending')
+    payout_method = db.Column(db.String(30), default='bank_transfer')
+    # Flutterwave transfer fields
+    flw_transfer_id = db.Column(db.String(255), nullable=True)
+    flw_reference = db.Column(db.String(255), nullable=True)
+    flw_transfer_status = db.Column(db.String(50), nullable=True)
+    flw_response_data = db.Column(db.JSON, nullable=True)
+    # Legacy Stripe fields
     stripe_transfer_id = db.Column(db.String(255), nullable=True)
     stripe_payout_id = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
@@ -46,6 +52,9 @@ class PayoutRequest(db.Model):
             'net_amount': float(self.net_amount) if self.net_amount else 0,
             'status': self.status,
             'payout_method': self.payout_method,
+            'flw_transfer_id': self.flw_transfer_id,
+            'flw_reference': self.flw_reference,
+            'flw_transfer_status': self.flw_transfer_status,
             'stripe_transfer_id': self.stripe_transfer_id,
             'stripe_payout_id': self.stripe_payout_id,
             'description': self.description,

@@ -17,10 +17,18 @@ class PayoutAccount(db.Model):
     payouts_enabled = db.Column(db.Boolean, default=False)
     details_submitted = db.Column(db.Boolean, default=False)
 
-    # Bank info
+    # Flutterwave Nigerian bank account (primary)
+    flw_bank_code = db.Column(db.String(10), nullable=True)
+    flw_account_number = db.Column(db.String(20), nullable=True)
+    flw_account_name = db.Column(db.String(200), nullable=True)
+    flw_bank_name = db.Column(db.String(200), nullable=True)
+    flw_verified = db.Column(db.SmallInteger, default=0)
+    flw_verified_at = db.Column(db.DateTime, nullable=True)
+
+    # Legacy bank info fields
     bank_account_last4 = db.Column(db.String(255), nullable=True)
     bank_account_type = db.Column(db.String(255), nullable=True)
-    bank_account_country = db.Column(db.String(2), default='CA')
+    bank_account_country = db.Column(db.String(2), default='NG')
     bank_name = db.Column(db.String(255), nullable=True)
     card_last4 = db.Column(db.String(255), nullable=True)
     card_brand = db.Column(db.String(255), nullable=True)
@@ -63,6 +71,13 @@ class PayoutAccount(db.Model):
             'user_id': self.user_id,
             'account_type': self.account_type,
             'status': self.status,
+            'flw_bank_code': self.flw_bank_code,
+            'flw_account_number': self.flw_account_number,
+            'flw_account_name': self.flw_account_name,
+            'flw_bank_name': self.flw_bank_name,
+            'flw_verified': bool(self.flw_verified),
+            'flw_verified_at': my_date_time(self.flw_verified_at),
+            'has_payout_account': bool(self.flw_account_number),
             'stripe_account_id': self.stripe_account_id,
             'onboarding_completed': self.onboarding_completed,
             'charges_enabled': self.charges_enabled,

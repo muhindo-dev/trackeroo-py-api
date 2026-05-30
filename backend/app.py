@@ -54,6 +54,7 @@ def create_app():
     from backend.routes.stream import stream_bp
     from backend.routes.calls import calls_bp
     from backend.routes.ratings import ratings_bp
+    from backend.routes.flutterwave import flutterwave_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
@@ -71,6 +72,7 @@ def create_app():
     app.register_blueprint(stream_bp)
     app.register_blueprint(calls_bp)
     app.register_blueprint(ratings_bp)
+    app.register_blueprint(flutterwave_bp)
 
     # Register Socket.IO call signaling events
     from backend.sockets.call_events import register_call_events
