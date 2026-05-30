@@ -213,8 +213,10 @@ class FlutterwaveService:
     # ── Nigerian bank utilities ───────────────────────────────────────────────
 
     def get_banks(self, country: str = 'NG') -> list:
-        """Fetch list of supported banks for a country."""
-        data = self._get('/banks', {'country': country})
+        """Fetch list of supported banks for a country.
+        FLW endpoint: GET /v3/banks/{country}
+        """
+        data = self._get(f'/banks/{country}')
         return data.get('data', [])
 
     def verify_bank_account(self, account_number: str, bank_code: str) -> dict:
