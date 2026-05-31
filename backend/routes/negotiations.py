@@ -141,7 +141,7 @@ def create(user):
 
     initial_price = int(data.get('initial_price', 0))
     if initial_price < 50:
-        return error_response("Minimum price is $0.50 (50 cents)")
+        return error_response("Minimum price is ₦50")
 
     negotiation = Negotiation(
         customer_id=user.id,
@@ -465,7 +465,7 @@ def set_agreed_price(user, neg_id):
     agreed_price = int(data.get('agreed_price', 0))
 
     if agreed_price < 1000 or agreed_price > 1000000:
-        return error_response("Agreed price must be between $10.00 and $10,000.00")
+        return error_response("Agreed price must be between ₦1,000 and ₦10,000,000")
 
     negotiation = Negotiation.query.get(neg_id)
     if not negotiation:
@@ -525,7 +525,7 @@ def refresh_payment(user):
         price_cents = int(negotiation.initial_price)
 
     if price_cents < 50:
-        return error_response("Price too low. Minimum is $0.50 (50 cents).")
+        return error_response("Price too low. Minimum is ₦50.")
 
     # Get customer email for Stripe
     customer_email = None

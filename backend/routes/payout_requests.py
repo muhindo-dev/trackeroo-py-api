@@ -69,7 +69,7 @@ def create(user):
         return error_response("Amount is required")
     amount = int(float(amount))
     if amount < 10:
-        return error_response("Minimum payout is $0.10 (10 cents)")
+        return error_response("Minimum payout is ₦100")
 
     # Check active payout account
     account = PayoutAccount.query.filter_by(user_id=user.id, is_active=True).first()

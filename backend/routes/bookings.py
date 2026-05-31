@@ -101,7 +101,7 @@ def create(user):
 
     customer_proposed_price = int(data.get('customer_proposed_price', 0))
     if customer_proposed_price < 50:
-        return error_response("Minimum price is $0.50 (50 cents)")
+        return error_response("Minimum price is ₦50")
 
     passengers = int(data.get('passengers', 1))
     if passengers < 1 or passengers > 10:
@@ -180,7 +180,7 @@ def create_courier_batch(user):
             customer_price = 0
 
         if customer_price < 50:
-            return error_response(f"Parcel #{idx}: minimum price is $0.50 (50 cents)")
+            return error_response(f"Parcel #{idx}: minimum price is ₦50")
 
         booking = ScheduledBooking(
             customer_id=user.id,
@@ -269,7 +269,7 @@ def propose_price(user, booking_id):
     data = request.get_json(silent=True) or request.form
     price = int(data.get('price', 0))
     if price < 50:
-        return error_response("Minimum price is $0.50 (50 cents)")
+        return error_response("Minimum price is ₦50")
 
     booking.driver_proposed_price = price
     booking.status = 'price_negotiating'

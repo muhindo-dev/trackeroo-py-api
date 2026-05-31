@@ -7,7 +7,7 @@ stripe.api_key = os.environ.get('STRIPE_SECRET_KEY', '')
 
 def create_checkout_session(
     amount_cents: int,
-    currency: str = 'cad',
+    currency: str = 'ngn',
     success_url: str = None,
     cancel_url: str = None,
     metadata: dict = None,
@@ -18,7 +18,7 @@ def create_checkout_session(
 
     Args:
         amount_cents: Price in cents (e.g., 5000 = $50.00)
-        currency: Currency code (default: cad)
+        currency: Currency code (default: ngn)
         success_url: Redirect URL after successful payment
         cancel_url: Redirect URL if customer cancels
         metadata: Dict with negotiation_id or booking_id

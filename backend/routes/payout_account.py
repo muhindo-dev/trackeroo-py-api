@@ -183,7 +183,7 @@ def preferences(user):
     if min_amount is not None:
         min_amount = int(min_amount)
         if min_amount < 10:
-            return error_response("Minimum payout amount must be at least $0.10")
+            return error_response("Minimum payout amount must be at least ₦100")
         account.minimum_payout_amount = min_amount
 
     db.session.commit()

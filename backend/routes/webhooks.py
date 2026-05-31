@@ -155,7 +155,7 @@ def _record_payment(customer_id, driver_id, amount, reference, negotiation_id=No
         driver_amount=driver_amount / 100 if driver_amount > 1000 else driver_amount,
         status='succeeded',
         payment_type='ride_payment',
-        currency='cad',
+        currency='ngn',
         description=f'Payment for negotiation #{negotiation_id}' if negotiation_id else 'Payment',
     )
     db.session.add(payment)
