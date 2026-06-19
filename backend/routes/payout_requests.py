@@ -72,7 +72,7 @@ def create(user):
         return error_response("Minimum payout is ₦100")
 
     # Check active payout account
-    account = PayoutAccount.query.filter_by(user_id=user.id, is_active=True).first()
+    account = PayoutAccount.query.filter_by(user_id=user.id, status='active').first()
     if not account:
         return error_response("No active payout account. Set up your payout account first.")
 
