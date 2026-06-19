@@ -15,6 +15,10 @@ const PayoutsPage      = lazy(() => import('./components/PayoutsPage'));
 const ChatsPage        = lazy(() => import('./components/ChatsPage'));
 const CompaniesPage    = lazy(() => import('./components/CompaniesPage'));
 const RouteStagesPage  = lazy(() => import('./components/RouteStagesPage'));
+const VehicleCategoriesPage = lazy(() => import('./components/VehicleCategoriesPage'));
+const PricingParametersPage = lazy(() => import('./components/PricingParametersPage'));
+const VehiclesPage          = lazy(() => import('./components/VehiclesPage'));
+const SubscriptionsPage     = lazy(() => import('./components/SubscriptionsPage'));
 
 const Loader = () => <div className="page-loader">Loading…</div>;
 
@@ -46,6 +50,10 @@ function AppRoutes() {
         <Route path="chats" element={<Suspense fallback={<Loader />}><ChatsPage /></Suspense>} />
         <Route path="companies" element={<Suspense fallback={<Loader />}><CompaniesPage /></Suspense>} />
         <Route path="route-stages" element={<Suspense fallback={<Loader />}><RouteStagesPage /></Suspense>} />
+        <Route path="vehicle-categories" element={<Suspense fallback={<Loader />}><VehicleCategoriesPage /></Suspense>} />
+        <Route path="pricing" element={<Suspense fallback={<Loader />}><PricingParametersPage /></Suspense>} />
+        <Route path="vehicles" element={<Suspense fallback={<Loader />}><VehiclesPage /></Suspense>} />
+        <Route path="subscriptions" element={<Suspense fallback={<Loader />}><SubscriptionsPage /></Suspense>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

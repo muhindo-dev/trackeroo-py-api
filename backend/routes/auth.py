@@ -97,6 +97,13 @@ def register():
     if not username:
         username = email.split('@')[0] if email else phone_number
 
+    # Account type: Customer (default) / Driver / VehicleOwner
+    account_type = (data.get('account_type') or 'Customer').strip()
+    if account_type not in ('Customer', 'Driver', 'VehicleOwner'):
+        account_type = 'Customer'
+    # Drivers start as 'Pending Driver' (need an active subscription to go live).
+    user_type = 'Pending Driver' if account_type == 'Driver' else 'Customer'
+
     # Create user
     user = AdminUser(
         username=username,
@@ -105,7 +112,14 @@ def register():
         last_name=last_name,
         email=email,
         phone_number=phone_number,
-        user_type='Customer',
+        user_type=user_type,
+        account_type=account_type,
+        owner_kind=data.get('owner_kind'),
+        vehicle_count=int(data.get('vehicle_count') or 0) if str(data.get('vehicle_count') or '').strip() else 0,
+        payment_period=data.get('payment_period'),
+        date_of_birth=data.get('date_of_birth'),
+        nin=data.get('nin'),
+        driving_license_number=data.get('driving_license_number'),
         status='1',
         country_name=data.get('country_name', 'Nigeria'),
         country_code=data.get('country_code', '+234'),
@@ -123,6 +137,24 @@ def register():
         # email_verified_at stays None until verified
 
     db.session.add(user)
+    db.session.flush()
+
+    # Vehicle Owner who is a Company: create a Company record and link it.
+    if account_type == 'VehicleOwner' and (data.get('owner_kind') == 'Company'):
+        company_name = (data.get('company_name') or '').strip()
+        if company_name:
+            from backend.models.company import Company
+            company = Company(
+                name=company_name,
+                address=data.get('company_address'),
+                email=email,
+                phone_number=phone_number,
+                administrator_id=user.id,
+            )
+            db.session.add(company)
+            db.session.flush()
+            user.company_id = company.id
+
     db.session.commit()
 
     # Send verification email (non-blocking — failure doesn't abort registration)

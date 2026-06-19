@@ -3,7 +3,8 @@ import { NavLink } from 'react-router-dom';
 import {
   FiHome, FiUsers, FiNavigation, FiMessageSquare,
   FiCalendar, FiCreditCard, FiX, FiDollarSign,
-  FiSend, FiMessageCircle, FiBriefcase, FiMapPin
+  FiSend, FiMessageCircle, FiBriefcase, FiMapPin, FiTruck,
+  FiTag, FiAward
 } from 'react-icons/fi';
 
 const NAV = [
@@ -18,6 +19,10 @@ const NAV = [
   { to: '/chats',         icon: FiMessageCircle, label: 'Chats' },
   { to: '/companies',     icon: FiBriefcase,     label: 'Companies' },
   { to: '/route-stages',  icon: FiMapPin,        label: 'Route Stages' },
+  { to: '/vehicle-categories', icon: FiTruck,    label: 'Vehicle Categories' },
+  { to: '/pricing',        icon: FiTag,          label: 'Pricing Parameters' },
+  { to: '/vehicles',       icon: FiTruck,        label: 'Vehicles' },
+  { to: '/subscriptions',  icon: FiAward,        label: 'Subscriptions' },
 ];
 
 export default function Sidebar({ open, onClose }) {

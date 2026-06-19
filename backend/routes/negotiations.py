@@ -21,6 +21,86 @@ def _is_paid(negotiation: Negotiation) -> bool:
     return negotiation.stripe_paid == 'Yes' or status in ('paid', 'completed')
 
 
+def _negotiation_fare(negotiation: Negotiation) -> float:
+    """Fare in major currency units. agreed_price is stored in major units;
+    initial_price is legacy cents."""
+    if negotiation.agreed_price:
+        return float(negotiation.agreed_price)
+    if negotiation.initial_price:
+        return float(negotiation.initial_price) / 100.0
+    return 0.0
+
+
+def _set_driver_busy(driver_id, minutes=120):
+    """Mark a driver busy until now+minutes for ETA availability matching."""
+    from datetime import timedelta
+    if not driver_id:
+        return
+    driver = db.session.get(AdminUser, driver_id)
+    if driver:
+        driver.busy_until = datetime.utcnow() + timedelta(minutes=minutes)
+
+
+def _free_driver(driver_id):
+    """Mark a driver free now (trip ended/declined)."""
+    if not driver_id:
+        return
+    driver = db.session.get(AdminUser, driver_id)
+    if driver:
+        driver.busy_until = None
+        driver.available_from = datetime.utcnow()
+
+
+def _credit_driver_earning(negotiation: Negotiation):
+    """Subscription model: on trip completion, credit the driver's wallet with the
+    fare as a `ride_earning` transaction (idempotent). This is what powers the
+    wallet paid/unpaid breakdown. Skips if the trip was already settled via the
+    in-app payment webhook (which credits separately)."""
+    import uuid
+    from backend.models.user_wallet import UserWallet
+    from backend.models.transaction import Transaction
+
+    if not negotiation.driver_id:
+        return
+    if _is_paid(negotiation):
+        return  # already credited by the payment webhook
+    # Idempotency: only one ride_earning per negotiation.
+    existing = Transaction.query.filter_by(
+        negotiation_id=negotiation.id, category='ride_earning'
+    ).first()
+    if existing:
+        return
+
+    fare = _negotiation_fare(negotiation)
+    if fare <= 0:
+        return
+
+    wallet = UserWallet.query.filter_by(user_id=negotiation.driver_id).first()
+    if not wallet:
+        wallet = UserWallet(user_id=negotiation.driver_id, wallet_balance=0, total_earnings=0)
+        db.session.add(wallet)
+        db.session.flush()
+
+    balance_before = float(wallet.wallet_balance or 0)
+    wallet.wallet_balance = balance_before + fare
+    wallet.total_earnings = float(wallet.total_earnings or 0) + fare
+
+    db.session.add(Transaction(
+        user_id=negotiation.driver_id,
+        user_type='driver',
+        type='credit',
+        category='ride_earning',
+        amount=fare,
+        balance_before=balance_before,
+        balance_after=wallet.wallet_balance,
+        reference=f'ride-{negotiation.id}-{uuid.uuid4().hex[:8]}',
+        description=f'Trip earning for ride #{negotiation.id}',
+        status='completed',
+        negotiation_id=negotiation.id,
+    ))
+    negotiation.payment_status = 'paid'
+
+
 # ---------------------------------------------------------------------------
 # Legacy endpoints (ApiChatController)
 # ---------------------------------------------------------------------------
@@ -317,6 +397,8 @@ def accept(user):
             )
         negotiation.status = 'Started'
         negotiation.is_active = 'Yes'
+        # ETA availability: driver is busy for the trip duration window.
+        _set_driver_busy(negotiation.driver_id)
 
     elif message_type == 'Accept':
         # Keep compatibility with existing Flutter calls while enforcing role intent.
@@ -378,6 +460,7 @@ def cancel(user):
 
     negotiation.status = 'Cancelled'
     negotiation.is_active = 'No'
+    _free_driver(negotiation.driver_id)
     db.session.commit()
 
     return success_response("Negotiation cancelled", negotiation.to_dict())
@@ -407,20 +490,24 @@ def complete(user):
             return error_response("Cannot cancel an already completed trip")
         negotiation.status = 'Cancelled'
         negotiation.is_active = 'No'
+        _free_driver(negotiation.driver_id)
         msg = "Trip cancelled"
     else:
         if user.id != negotiation.driver_id:
             return error_response("Only the assigned driver can complete this trip", status_code=403)
 
-        if not _is_paid(negotiation):
-            return error_response("Payment must be completed before ending this trip")
-
+        # Subscription is the payment mode: trips no longer require an in-app
+        # customer payment to complete. The driver's wallet is credited with the
+        # fare as earnings on completion (idempotent), and subscription is the
+        # platform's revenue.
         if negotiation.status not in ('Started', 'Accepted', 'Active'):
             return error_response(
                 f"Cannot complete — current status is '{negotiation.status}'"
             )
         negotiation.status = 'Completed'
         negotiation.is_active = 'No'
+        _credit_driver_earning(negotiation)
+        _free_driver(negotiation.driver_id)
         msg = "Trip completed"
 
     db.session.commit()

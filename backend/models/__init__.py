@@ -23,3 +23,6 @@ from backend.models.call_log import CallLog
 from backend.models.popular_location import PopularLocation
 from backend.models.service_rate import ServiceRate
 from backend.models.driver_rating import DriverRating
+from backend.models.vehicle_category import VehicleCategory
+from backend.models.vehicle import Vehicle
+from backend.models.subscription import SubscriptionPlan, Subscription

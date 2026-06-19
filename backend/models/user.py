@@ -81,6 +81,16 @@ class AdminUser(db.Model):
     emergency_contact_phone = db.Column(db.String(50), nullable=True)
     years_of_experience = db.Column(db.SmallInteger, default=0)
 
+    # Account model & availability matching (migration 0014)
+    account_type = db.Column(db.String(30), default='Customer')   # Customer/Driver/VehicleOwner
+    owner_kind = db.Column(db.String(30), nullable=True)          # Company / Sole
+    company_id = db.Column(db.BigInteger, nullable=True)
+    vehicle_count = db.Column(db.Integer, default=0)
+    payment_period = db.Column(db.String(20), nullable=True)      # Instant/Daily/Weekly/Monthly
+    # When the driver is expected to be free for the next job (ETA matching)
+    available_from = db.Column(db.DateTime, nullable=True)
+    busy_until = db.Column(db.DateTime, nullable=True)
+
     # Relationships
     wallet = db.relationship('UserWallet', backref='user', uselist=False, lazy=True)
     payout_account = db.relationship('PayoutAccount', backref='user', uselist=False, lazy=True)
@@ -164,6 +174,13 @@ class AdminUser(db.Model):
             'emergency_contact_name': self.emergency_contact_name,
             'emergency_contact_phone': self.emergency_contact_phone,
             'years_of_experience': self.years_of_experience or 0,
+            'account_type': self.account_type or 'Customer',
+            'owner_kind': self.owner_kind,
+            'company_id': self.company_id,
+            'vehicle_count': self.vehicle_count or 0,
+            'payment_period': self.payment_period,
+            'available_from': my_date_time(self.available_from) if self.available_from else None,
+            'busy_until': my_date_time(self.busy_until) if self.busy_until else None,
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),
         }

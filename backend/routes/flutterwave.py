@@ -288,6 +288,25 @@ def _handle_charge_completed(flw: FlutterwaveService, data: dict):
     if paid_status != 'successful':
         return
 
+    # Subscription payments (tx_ref prefixed 'sub-' or meta.type='subscription').
+    meta = data.get('meta') or data.get('meta_data') or {}
+    is_subscription = str(tx_ref).startswith('sub') or (
+        isinstance(meta, dict) and meta.get('type') == 'subscription')
+    if is_subscription:
+        from backend.models.subscription import Subscription
+        sub = Subscription.query.filter_by(tx_ref=tx_ref).first()
+        if not sub or sub.is_active_now:
+            return  # unknown or already active (idempotent)
+        # Verify with Flutterwave before activating (never trust webhook alone).
+        try:
+            verification = flw.verify_by_id(flw_tx_id) if flw_tx_id else flw.verify_by_tx_ref(tx_ref)
+        except FlutterwaveError:
+            return
+        if not flw.is_payment_successful(verification, float(sub.amount or 0)):
+            return
+        Subscription.activate_by_tx_ref(tx_ref, flw_tx_id)
+        return
+
     # Find booking by tx_ref
     booking = ScheduledBooking.query.filter(
         (ScheduledBooking.flw_tx_ref == tx_ref) |

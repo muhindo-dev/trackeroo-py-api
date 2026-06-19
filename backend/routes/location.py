@@ -10,6 +10,25 @@ from backend.utils.response import success_response, error_response
 location_bp = Blueprint('location', __name__)
 
 
+def _subscription_block(user, going_online):
+    """Return an error_response if a driver may not go online, else None.
+
+    Truckeroo's payment mode is subscription: a driver can only go online with
+    an active subscription. Customers/owners who aren't drivers are unaffected.
+    """
+    if not going_online:
+        return None
+    if user.user_type not in ('Driver', 'Pending Driver'):
+        return None
+    from backend.models.subscription import Subscription
+    if Subscription.active_for_driver(user.id) is None:
+        return error_response(
+            "An active subscription is required to go online.",
+            {'requires_subscription': True}, status_code=402,
+        )
+    return None
+
+
 @location_bp.route('/api/go-on-off', methods=['POST'])
 @jwt_required_with_user
 def go_on_off(user):
@@ -24,6 +43,10 @@ def go_on_off(user):
 
     if status not in ('online', 'offline'):
         return error_response("Status must be 'online' or 'offline'")
+
+    blocked = _subscription_block(user, status == 'online')
+    if blocked is not None:
+        return blocked
 
     # ready_for_trip is the real DB column (varchar 'Yes'/'No')
     user.current_latitude = lati
@@ -54,6 +77,9 @@ def update_online_status(user):
     if status:
         if status not in ('online', 'offline'):
             return error_response("Status must be 'online' or 'offline'")
+        blocked = _subscription_block(user, status == 'online')
+        if blocked is not None:
+            return blocked
         user.ready_for_trip = 'Yes' if status == 'online' else 'No'
         if lat or lng:
             user.last_location_update = datetime.utcnow()

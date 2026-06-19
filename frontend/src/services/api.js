@@ -90,6 +90,19 @@ export const adminAPI = {
   routeStageCreate:(data) => api.post('/admin/route-stages', data),
   routeStageUpdate:(id, data) => api.post(`/admin/route-stages/${id}`, data),
   routeStageDelete:(id) => api.post(`/admin/route-stages/${id}/delete`),
+
+  vehicleCategories:      () => api.get('/admin/vehicle-categories'),
+  vehicleCategoryCreate:  (data) => api.post('/admin/vehicle-categories', data),
+  vehicleCategoryUpdate:  (id, data) => api.post(`/admin/vehicle-categories/${id}`, data),
+  vehicleCategoryDelete:  (id) => api.post(`/admin/vehicle-categories/${id}/delete`),
+
+  vehicles:        (params) => api.get('/admin/vehicles', { params }),
+  vehicleVerify:   (id, data) => api.post(`/admin/vehicles/${id}/verify`, data),
+
+  serviceRates:       () => api.get('/admin/service-rates'),
+  serviceRateUpdate:  (id, data) => api.post(`/admin/service-rates/${id}`, data),
+
+  subscriptions:   (params) => api.get('/admin/subscriptions', { params }),
 };
 
 export default api;
