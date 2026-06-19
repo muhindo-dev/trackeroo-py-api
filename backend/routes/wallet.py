@@ -147,7 +147,11 @@ def reclaim(user):
 
     wallet = UserWallet.query.filter_by(user_id=user.id).first()
     if not wallet:
-        return error_response("Wallet not found", status_code=404)
+        # Auto-create (consistent with /wallet/breakdown) so we fall through to a
+        # clean "no payout account / no unpaid earnings" message instead of 404.
+        wallet = UserWallet(user_id=user.id, wallet_balance=0, total_earnings=0)
+        db.session.add(wallet)
+        db.session.commit()
 
     # A reclaim is an EARLY PAYOUT of unpaid (<24h) earnings at a fee, routed
     # through the normal payout-request flow (real money-out via admin/Flutterwave).
