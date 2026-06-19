@@ -155,7 +155,7 @@ def reclaim(user):
 
     # A reclaim is an EARLY PAYOUT of unpaid (<24h) earnings at a fee, routed
     # through the normal payout-request flow (real money-out via admin/Flutterwave).
-    account = PayoutAccount.query.filter_by(user_id=user.id, is_active=True).first()
+    account = PayoutAccount.query.filter_by(user_id=user.id, status='active').first()
     if not account:
         return error_response(
             "No active payout account. Set up your payout account first.",
