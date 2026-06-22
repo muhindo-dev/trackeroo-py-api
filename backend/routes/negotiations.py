@@ -22,10 +22,11 @@ def _is_paid(negotiation: Negotiation) -> bool:
 
 
 def _negotiation_fare(negotiation: Negotiation) -> float:
-    """Fare in major currency units. agreed_price is stored in major units;
-    initial_price is legacy cents."""
+    """Fare in major currency units. Both agreed_price and initial_price are
+    stored in CENTS/kobo across this codebase (accept() and set_agreed_price()
+    write cents into agreed_price), so divide by 100 for the major-unit amount."""
     if negotiation.agreed_price:
-        return float(negotiation.agreed_price)
+        return float(negotiation.agreed_price) / 100.0
     if negotiation.initial_price:
         return float(negotiation.initial_price) / 100.0
     return 0.0

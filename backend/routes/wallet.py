@@ -207,6 +207,17 @@ def reclaim(user):
         requested_at=datetime.utcnow(),
     )
     db.session.add(payout)
+    # Record a withdrawal debit for the reclaimed principal so these earnings are
+    # NOT counted as withdrawable again once they age past 24h (breakdown subtracts
+    # withdrawal debits from settled earnings).
+    db.session.add(Transaction(
+        user_id=user.id, user_type='driver', type='debit', category='withdrawal',
+        amount=amount, balance_before=float(wallet.wallet_balance or 0),
+        balance_after=float(wallet.wallet_balance or 0),
+        reference=f"reclaim_{uuid.uuid4().hex[:16]}",
+        description=f"Early reclaim of {amount:.0f} (net {net:.0f})",
+        status='completed',
+    ))
     # Record the fee as a service_fee debit for the ledger.
     db.session.add(Transaction(
         user_id=user.id, user_type='driver', type='debit', category='service_fee',

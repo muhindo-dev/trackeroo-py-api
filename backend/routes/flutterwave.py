@@ -539,7 +539,7 @@ def save_payout_account(user):
     payout_account.flw_account_number = account_number
     payout_account.flw_account_name = account_name
     payout_account.flw_bank_name = bank_name
-    payout_account.flw_verified = True
+    payout_account.flw_verified = 1
     payout_account.flw_verified_at = datetime.utcnow()
     payout_account.default_currency = 'NGN'
     db.session.commit()

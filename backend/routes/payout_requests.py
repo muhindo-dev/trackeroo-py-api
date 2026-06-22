@@ -81,10 +81,13 @@ def create(user):
     if not wallet or wallet.wallet_balance < amount:
         return error_response("Insufficient wallet balance")
 
+    from datetime import datetime
     payout = PayoutRequest(
         user_id=user.id,
         payout_account_id=account.id,
         amount=amount,
+        net_amount=amount,  # NOT NULL — no fee on standard payouts
+        requested_at=datetime.utcnow(),  # NOT NULL
         payout_method=data.get('payout_method', 'standard'),
         description=data.get('description'),
         status='pending',

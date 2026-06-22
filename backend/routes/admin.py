@@ -997,6 +997,28 @@ def payout_complete(user, payout_id):
     payout = PayoutRequest.query.get(payout_id)
     if not payout:
         return error_response("Payout request not found", status_code=404)
+    if payout.status == 'completed':
+        return success_response("Payout already completed", payout.to_dict())
+
+    # Debit the wallet for the money that actually went out, and record a
+    # withdrawal transaction — unless this is a reclaim payout, which already
+    # wrote its withdrawal debit at request time (avoid double-debiting).
+    if payout.payout_method != 'reclaim':
+        import uuid as _uuid
+        wallet = UserWallet.query.filter_by(user_id=payout.user_id).first()
+        if wallet:
+            before = float(wallet.wallet_balance or 0)
+            amount = float(payout.amount or 0)
+            wallet.wallet_balance = before - amount
+            db.session.add(Transaction(
+                user_id=payout.user_id, user_type='driver', type='debit',
+                category='withdrawal', amount=amount,
+                balance_before=before, balance_after=wallet.wallet_balance,
+                reference=f"payout_{payout.id}_{_uuid.uuid4().hex[:8]}",
+                description=f"Payout #{payout.id} completed",
+                status='completed',
+            ))
+
     payout.status = 'completed'
     payout.processed_at = datetime.utcnow()
     db.session.commit()

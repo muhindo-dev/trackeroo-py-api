@@ -104,8 +104,11 @@ def expire_subscriptions():
 @jwt_required_with_user
 def subscribe(user):
     data = request.get_json(silent=True) or request.form or {}
-    plan_id = data.get('plan_id')
-    plan = db.session.get(SubscriptionPlan, int(plan_id)) if plan_id else None
+    try:
+        plan_id = int(data.get('plan_id'))
+    except (TypeError, ValueError):
+        return error_response("Valid plan_id is required")
+    plan = db.session.get(SubscriptionPlan, plan_id)
     if not plan or not plan.is_active:
         return error_response("Valid plan_id is required")
 
