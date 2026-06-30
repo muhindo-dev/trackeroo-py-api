@@ -49,9 +49,11 @@ def initialize_payment(user):
     Body: { booking_id, amount? }
     Returns: { payment_link, tx_ref, booking_id }
     """
-    data = request.get_json(silent=True) or {}
-    booking_id = data.get('booking_id')
-    if not booking_id:
+    data = request.get_json(silent=True) or request.form or {}
+    raw_booking_id = data.get('booking_id') or data.get('bookingId')
+    try:
+        booking_id = int(raw_booking_id)
+    except (TypeError, ValueError):
         return error_response("booking_id is required")
 
     booking = ScheduledBooking.query.get(booking_id)
@@ -390,7 +392,7 @@ def verify_account(user):
     Body: { account_number, bank_code }
     Returns: { account_name, account_number, bank_code }
     """
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) or request.form or {}
     account_number = data.get('account_number', '')
     bank_code = data.get('bank_code', '') or data.get('account_bank', '')
 
@@ -420,7 +422,7 @@ def initiate_payout(user):
     if user.id != 1:
         return error_response("Admin only", status_code=403)
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) or request.form or {}
     payout_id = data.get('payout_request_id')
     if not payout_id:
         return error_response("payout_request_id is required")
@@ -496,7 +498,7 @@ def transfer_status(user):
 @flutterwave_bp.route('/api/flutterwave/transfer-callback', methods=['POST'])
 def transfer_callback():
     """Flutterwave transfer callback (payout status update)."""
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) or request.form or {}
     _handle_transfer_completed(data)
     return {'status': 'ok'}, 200
 
@@ -513,7 +515,7 @@ def save_payout_account(user):
     Body: { account_number, bank_code, bank_name }
     Verifies the account with Flutterwave before saving.
     """
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) or request.form or {}
     account_number = data.get('account_number', '').strip()
     bank_code = data.get('bank_code', '').strip()
     bank_name = data.get('bank_name', '').strip()
