@@ -103,7 +103,10 @@ export const adminAPI = {
   serviceRates:       () => api.get('/admin/service-rates'),
   serviceRateUpdate:  (id, data) => api.post(`/admin/service-rates/${id}`, data),
 
-  subscriptions:   (params) => api.get('/admin/subscriptions', { params }),
+  subscriptions:        (params) => api.get('/admin/subscriptions', { params }),
+  subscriptionActivate: (id, data) => api.post(`/admin/subscriptions/${id}/activate`, data || {}),
+  subscriptionCancel:   (id, data) => api.post(`/admin/subscriptions/${id}/cancel`, data || {}),
+  subscriptionGrant:    (data) => api.post('/admin/subscriptions/grant', data),
 };
 
 export default api;

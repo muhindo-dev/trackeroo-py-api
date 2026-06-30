@@ -55,15 +55,110 @@ def admin_list(user):
         Subscription.status == 'active').scalar())
     active_count = Subscription.query.filter_by(status='active').count()
 
+    from backend.models.user import AdminUser
     rows = []
     for s in subs:
         d = s.to_dict()
+        driver = db.session.get(AdminUser, s.driver_id) if s.driver_id else None
+        d['driver_name'] = driver.name if driver else None
+        d['driver_email'] = driver.email if driver else None
+        d['driver_phone'] = driver.phone_number if driver else None
         rows.append(d)
     return success_response("Subscriptions", {
         'subscriptions': rows,
         'active_count': active_count,
         'active_revenue': revenue,
     })
+
+
+def _promote_driver(driver_id):
+    """Ensure a driver whose subscription is active can operate."""
+    from backend.models.user import AdminUser
+    driver = db.session.get(AdminUser, driver_id)
+    if driver and driver.user_type == 'Pending Driver':
+        driver.user_type = 'Driver'
+
+
+@subscriptions_bp.route('/api/admin/subscriptions/<int:sub_id>/activate', methods=['POST'])
+@admin_required
+def admin_activate(user, sub_id):
+    """Admin marks a subscription as PAID & ACTIVE (manual activation).
+
+    Optional body: {"duration_days": <int>} to override the plan duration.
+    """
+    sub = db.session.get(Subscription, sub_id)
+    if not sub:
+        return error_response("Subscription not found", status_code=404)
+    data = request.get_json(silent=True) or request.form or {}
+    duration = data.get('duration_days')
+    try:
+        duration = int(duration) if duration not in (None, '') else None
+    except (TypeError, ValueError):
+        duration = None
+    sub.activate(duration_days=duration)
+    _promote_driver(sub.driver_id)
+    db.session.commit()
+    return success_response("Subscription activated", sub.to_dict())
+
+
+@subscriptions_bp.route('/api/admin/subscriptions/<int:sub_id>/cancel', methods=['POST'])
+@admin_required
+def admin_cancel(user, sub_id):
+    """Admin cancels/expires a subscription and takes the driver offline if they
+    have no other active subscription."""
+    from backend.models.user import AdminUser
+    sub = db.session.get(Subscription, sub_id)
+    if not sub:
+        return error_response("Subscription not found", status_code=404)
+    data = request.get_json(silent=True) or request.form or {}
+    sub.status = data.get('status', 'cancelled')
+    if sub.status not in ('cancelled', 'expired'):
+        sub.status = 'cancelled'
+    driver = db.session.get(AdminUser, sub.driver_id)
+    if driver and Subscription.active_for_driver(driver.id) is None:
+        driver.ready_for_trip = 'No'
+    db.session.commit()
+    return success_response("Subscription " + sub.status, sub.to_dict())
+
+
+@subscriptions_bp.route('/api/admin/subscriptions/grant', methods=['POST'])
+@admin_required
+def admin_grant(user):
+    """Admin manually grants (creates + activates) a subscription for a driver —
+    e.g. a comped or offline-paid subscription. Body: {driver_id, plan_id,
+    duration_days?}."""
+    from backend.models.user import AdminUser
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        driver_id = int(data.get('driver_id'))
+        plan_id = int(data.get('plan_id'))
+    except (TypeError, ValueError):
+        return error_response("Valid driver_id and plan_id are required")
+
+    driver = db.session.get(AdminUser, driver_id)
+    plan = db.session.get(SubscriptionPlan, plan_id)
+    if not driver:
+        return error_response("Driver not found", status_code=404)
+    if not plan:
+        return error_response("Plan not found", status_code=404)
+
+    duration = data.get('duration_days')
+    try:
+        duration = int(duration) if duration not in (None, '') else None
+    except (TypeError, ValueError):
+        duration = None
+
+    sub = Subscription(
+        driver_id=driver_id, plan_id=plan.id, amount=plan.amount,
+        currency=plan.currency or 'NGN', status='pending',
+        tx_ref=f"admin-grant-{driver_id}-{plan_id}",
+    )
+    db.session.add(sub)
+    db.session.flush()
+    sub.activate(duration_days=duration)
+    _promote_driver(driver_id)
+    db.session.commit()
+    return success_response("Subscription granted & activated", sub.to_dict())
 
 
 @subscriptions_bp.route('/api/subscriptions/expire', methods=['POST'])
