@@ -5,6 +5,7 @@ import {
   FiChevronRight, FiEdit2, FiTrash2, FiUser, FiAlertTriangle,
   FiRefreshCw, FiFilter, FiKey, FiDollarSign, FiEye, FiEyeOff,
   FiChevronDown, FiSave, FiXCircle, FiFileText, FiCamera,
+  FiCheckCircle, FiMail,
 } from 'react-icons/fi';
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
@@ -919,6 +920,8 @@ export default function UsersPage() {
       if (action === 'approve') await adminAPI.approveDriver(id);
       else if (action === 'reject') await adminAPI.rejectDriver(id);
       else if (action === 'toggle') await adminAPI.toggleStatus(id);
+      else if (action === 'verify') await adminAPI.verifyEmail(id, true);
+      else if (action === 'unverify') await adminAPI.verifyEmail(id, false);
       else if (action === 'delete') await adminAPI.userDelete(id);
       load(page, search, filterType);
     } catch {
@@ -1031,8 +1034,11 @@ export default function UsersPage() {
                     </td>
                     {/* contact */}
                     <td style={{ padding: '10px 12px' }}>
-                      <div style={{ fontSize: 12, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+                      <div style={{ fontSize: 12, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180, display: 'flex', alignItems: 'center', gap: 5 }}>
                         {u.email || <span style={{ color: '#bbb' }}>No email</span>}
+                        {u.email && (u.email_verified
+                          ? <span title="Email verified" style={{ color: '#2e7d32', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Verified</span>
+                          : <span title="Email not verified" style={{ color: '#c47f00', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>Unverified</span>)}
                       </div>
                       <div style={{ fontSize: 11, color: '#999' }}>{u.phone_number || '—'}</div>
                     </td>
@@ -1092,6 +1098,18 @@ export default function UsersPage() {
                             <FiFileText size={12} />
                           </button>
                         )}
+
+                        {/* mark email verified / unverify */}
+                        <button
+                          className="btn btn-xs"
+                          title={u.email_verified ? 'Email verified — click to un-verify' : 'Mark email as verified'}
+                          disabled={busy}
+                          onClick={() => tryAction(u.id, u.email_verified ? 'unverify' : 'verify',
+                            `${u.email_verified ? 'Remove verification from' : 'Mark verified:'} ${u.name || 'this user'}?`)}
+                          style={{ borderColor: u.email_verified ? '#2e7d32' : '#c47f00', color: u.email_verified ? '#2e7d32' : '#c47f00' }}
+                        >
+                          {u.email_verified ? <FiCheckCircle size={13} /> : <FiMail size={13} />}
+                        </button>
 
                         {/* toggle active */}
                         <button

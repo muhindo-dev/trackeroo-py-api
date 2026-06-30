@@ -45,6 +45,7 @@ export const adminAPI = {
   approveDriver:(id, data) => api.post(`/admin/users/${id}/approve-driver`, data || {}),
   rejectDriver: (id) => api.post(`/admin/users/${id}/reject-driver`),
   toggleStatus: (id) => api.post(`/admin/users/${id}/toggle-status`),
+  verifyEmail:  (id, verified = true) => api.post(`/admin/users/${id}/verify-email`, { verified }),
   userDelete:   (id) => api.post(`/admin/users/${id}/delete`),
   userWallet:   (id) => api.get(`/admin/users/${id}/wallet`),
   userWalletAdj:(id, data) => api.post(`/admin/users/${id}/wallet/adjust`, data),

@@ -391,6 +391,36 @@ def toggle_status(user, user_id):
     return success_response("Status updated", target.to_dict())
 
 
+@admin_bp.route('/api/admin/users/<int:user_id>/verify-email', methods=['POST'])
+@admin_required
+def verify_email(user, user_id):
+    """Admin marks (or un-marks) a user's email as verified.
+
+    Body: {"verified": true|false} — defaults to true. Setting email_verified_at
+    clears any pending verification token so the account is treated as verified.
+    """
+    target = AdminUser.query.get(user_id)
+    if not target:
+        return error_response("User not found", status_code=404)
+
+    data = request.get_json(silent=True) or request.form or {}
+    raw = data.get('verified', True)
+    verified = str(raw).lower() in ('1', 'true', 'yes') if not isinstance(raw, bool) else raw
+
+    if verified:
+        target.email_verified_at = datetime.utcnow()
+        target.email_verification_token = None
+        target.verification_token_expires = None
+    else:
+        target.email_verified_at = None
+    target.updated_at = datetime.utcnow()
+    db.session.commit()
+    return success_response(
+        "Email marked as verified" if verified else "Email verification removed",
+        target.to_dict(),
+    )
+
+
 @admin_bp.route('/api/admin/users/<int:user_id>/delete', methods=['POST', 'DELETE'])
 @admin_required
 def users_delete(user, user_id):

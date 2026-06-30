@@ -131,10 +131,11 @@ def register():
     user.set_password(password)
 
     # Generate email verification token if email is provided
-    if email:
-        user.email_verification_token = secrets.token_urlsafe(32)
-        user.verification_token_expires = datetime.utcnow() + timedelta(hours=24)
-        # email_verified_at stays None until verified
+    # Auto-verify new accounts (email verification gate disabled): every user is
+    # created already mail-verified so they go straight into the app.
+    user.email_verified_at = datetime.utcnow()
+    user.email_verification_token = None
+    user.verification_token_expires = None
 
     db.session.add(user)
     db.session.flush()
@@ -157,17 +158,13 @@ def register():
 
     db.session.commit()
 
-    # Send verification email (non-blocking — failure doesn't abort registration)
-    if email:
-        send_verification_email(email, user.name or first_name or email, user.email_verification_token)
-
     token = create_access_token(identity=str(user.id))
 
     payload = _build_auth_user_payload(user, token)
-    payload['requires_email_verification'] = bool(email)
+    payload['requires_email_verification'] = False
 
     return success_response(
-        "Registration successful. Please check your email to verify your account.",
+        "Registration successful.",
         payload,
         status_code=201,
     )

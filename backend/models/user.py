@@ -127,6 +127,8 @@ class AdminUser(db.Model):
             'first_name': self.first_name,
             'last_name': self.last_name,
             'email': self.email,
+            'email_verified': self.email_verified_at is not None,
+            'email_verified_at': my_date_time(self.email_verified_at) if self.email_verified_at else None,
             'phone_number': self.phone_number,
             'avatar': self.avatar,
             'country_name': self.country_name,
