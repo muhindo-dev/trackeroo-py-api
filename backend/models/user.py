@@ -89,6 +89,7 @@ class AdminUser(db.Model):
     payment_period = db.Column(db.String(20), nullable=True)      # Instant/Daily/Weekly/Monthly
     # When the driver is expected to be free for the next job (ETA matching)
     available_from = db.Column(db.DateTime, nullable=True)
+    live_service_group = db.Column(db.String(50), nullable=True)  # group driver went live for
     busy_until = db.Column(db.DateTime, nullable=True)
 
     # Relationships
@@ -182,6 +183,7 @@ class AdminUser(db.Model):
             'vehicle_count': self.vehicle_count or 0,
             'payment_period': self.payment_period,
             'available_from': my_date_time(self.available_from) if self.available_from else None,
+            'live_service_group': self.live_service_group,
             'busy_until': my_date_time(self.busy_until) if self.busy_until else None,
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),

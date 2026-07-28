@@ -19,14 +19,46 @@ def submit_rating(user):
     """Customer submits a rating for a completed + paid booking."""
     data = request.get_json(silent=True) or request.form
 
-    booking_id = int(data.get('booking_id', 0))
-    rating_val = int(data.get('rating', 0))
-    comment = data.get('comment', '').strip()
+    booking_id = int(data.get('booking_id', 0) or 0)
+    negotiation_id = int(data.get('negotiation_id', 0) or 0)
+    rating_val = int(data.get('rating', 0) or 0)
+    comment = (data.get('comment') or '').strip()
 
-    if not booking_id:
-        return error_response("booking_id is required")
     if rating_val < 1 or rating_val > 5:
         return error_response("Rating must be between 1 and 5")
+
+    # ── V2 instant rides: rate by negotiation_id ─────────────────────────────
+    if negotiation_id:
+        from backend.models.negotiation import Negotiation
+        neg = Negotiation.query.get(negotiation_id)
+        if not neg:
+            return error_response("Trip not found", status_code=404)
+        if neg.customer_id != user.id:
+            return error_response("You can only rate your own trips", status_code=403)
+        if neg.status != 'Completed':
+            return error_response("You can only rate completed trips")
+        if not neg.driver_id:
+            return error_response("No driver on this trip")
+        if DriverRating.query.filter_by(customer_id=user.id,
+                                        negotiation_id=negotiation_id).first():
+            return error_response("You have already rated this trip")
+
+        rating = DriverRating(
+            customer_id=user.id, driver_id=neg.driver_id,
+            booking_id=0, negotiation_id=negotiation_id,
+            rating=rating_val, comment=comment or None,
+        )
+        db.session.add(rating)
+        new_avg = db.session.query(func.avg(DriverRating.rating)).filter_by(
+            driver_id=neg.driver_id).scalar() or rating_val
+        driver = AdminUser.query.get(neg.driver_id)
+        if driver:
+            driver.rating = round(float(new_avg), 2)
+        db.session.commit()
+        return success_response("Rating submitted. Thank you!", rating.to_dict(), status_code=201)
+
+    if not booking_id:
+        return error_response("booking_id or negotiation_id is required")
 
     booking = ScheduledBooking.query.get(booking_id)
     if not booking:

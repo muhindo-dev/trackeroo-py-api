@@ -53,6 +53,13 @@ def go_on_off(user):
     user.current_longitude = long_
     user.current_address = f"{lati},{long_}"
     user.ready_for_trip = 'Yes' if status == 'online' else 'No'
+    # V2: capture the service group the driver goes live for
+    if status == 'online':
+        group = (data.get('service_group') or '').strip()
+        if group:
+            user.live_service_group = group
+    else:
+        user.live_service_group = None
     user.last_location_update = datetime.utcnow()
 
     db.session.commit()
@@ -81,6 +88,19 @@ def update_online_status(user):
         if blocked is not None:
             return blocked
         user.ready_for_trip = 'Yes' if status == 'online' else 'No'
+        # V2: driver declares which service they're going live for (dynamic groups)
+        if status == 'online':
+            group = (data.get('service_group') or '').strip()
+            if group:
+                from backend.models.vehicle_category import VehicleCategory
+                valid = {g[0] for g in db.session.query(
+                    VehicleCategory.service_group).filter_by(is_active=1).distinct()}
+                if group not in valid:
+                    return error_response(
+                        f"Invalid service_group. Choose one of: {', '.join(sorted(valid))}")
+                user.live_service_group = group
+        else:
+            user.live_service_group = None
         if lat or lng:
             user.last_location_update = datetime.utcnow()
     else:

@@ -10,6 +10,7 @@ class DriverRating(db.Model):
     customer_id = db.Column(db.BigInteger, nullable=False)
     driver_id = db.Column(db.BigInteger, nullable=False)
     booking_id = db.Column(db.BigInteger, nullable=False)
+    negotiation_id = db.Column(db.BigInteger, nullable=True)
     rating = db.Column(db.SmallInteger, nullable=False)
     comment = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

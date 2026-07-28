@@ -26,3 +26,4 @@ from backend.models.driver_rating import DriverRating
 from backend.models.vehicle_category import VehicleCategory
 from backend.models.vehicle import Vehicle
 from backend.models.subscription import SubscriptionPlan, Subscription
+from backend.models.ride_dispatch import RideDispatch

@@ -12,6 +12,8 @@ class Negotiation(db.Model):
     driver_id = db.Column(db.Integer, nullable=True)
     driver_name = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(255), default='Pending')
+    payment_method = db.Column(db.String(20), nullable=True)   # MM/Visa/Cash (data only)
+    ride_source = db.Column(db.String(20), default='app')      # 'instant' = auto-dispatch
     is_active = db.Column(db.String(55), nullable=True)
     customer_accepted = db.Column(db.String(255), default='Pending')
     customer_driver = db.Column(db.String(255), default='Pending')
@@ -104,6 +106,8 @@ class Negotiation(db.Model):
             'driver_id': self.driver_id,
             'driver_name': self.driver_name,
             'status': self.status,
+            'payment_method': self.payment_method,
+            'ride_source': self.ride_source,
             'is_active': self.is_active,
             'customer_accepted': self.customer_accepted,
             'customer_driver': self.customer_driver,

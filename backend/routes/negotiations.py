@@ -438,6 +438,13 @@ def accept(user):
                 and negotiation.status == 'Active'):
             negotiation.status = 'Accepted'
 
+    # V2 instant-ride hook: driver acceptance settles the dispatch.
+    if negotiation.status in ('Accepted', 'Started') and negotiation.ride_source == 'instant':
+        from backend.models.ride_dispatch import RideDispatch
+        dispatch = RideDispatch.query.filter_by(negotiation_id=negotiation.id).first()
+        if dispatch and dispatch.status in ('offered', 'searching'):
+            dispatch.status = 'matched'
+
     db.session.commit()
     return success_response("Negotiation updated", negotiation.to_dict())
 
@@ -458,6 +465,19 @@ def cancel(user):
 
     if negotiation.status in ('Started', 'Completed'):
         return error_response("Cannot cancel a negotiation that is already " + negotiation.status)
+
+    # V2 instant-ride hook: when the OFFERED DRIVER declines an instant ride,
+    # don't kill the ride — pass the offer to the next fairest candidate.
+    if negotiation.ride_source == 'instant' and user.id == negotiation.driver_id:
+        from backend.models.ride_dispatch import RideDispatch
+        from backend.routes.rides import _advance
+        dispatch = RideDispatch.query.filter_by(negotiation_id=negotiation.id).first()
+        if dispatch and dispatch.status in ('offered', 'searching'):
+            advanced = _advance(dispatch, negotiation)
+            db.session.commit()
+            return success_response(
+                "Offer passed to the next driver" if advanced else "No more drivers available",
+                negotiation.to_dict())
 
     negotiation.status = 'Cancelled'
     negotiation.is_active = 'No'
