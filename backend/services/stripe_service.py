@@ -38,7 +38,7 @@ def create_checkout_session(
                 'currency': currency,
                 'unit_amount': amount_cents,
                 'product_data': {
-                    'name': 'NegoRide Canada - Ride Payment',
+                    'name': 'Truckfully Canada - Ride Payment',
                 },
             },
             'quantity': 1,

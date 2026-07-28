@@ -10,7 +10,7 @@ ONESIGNAL_API_URL = 'https://onesignal.com/api/v1/notifications'
 def send_push(
     user_ids: list = None,
     segments: list = None,
-    title: str = 'NegoRide Canada',
+    title: str = 'Truckfully Canada',
     message: str = '',
     data: dict = None,
 ):

@@ -62,7 +62,7 @@ def up(conn):
         # 6. Clear and reseed service_rates with NGN pricing
         cur.execute("DELETE FROM service_rates")
         rates = [
-            ('Truckeroo', 'Any',        500,   150,  20,  1.00,  800,  'NGN', 'Standard rideshare seat booking'),
+            ('Truckfully', 'Any',        500,   150,  20,  1.00,  800,  'NGN', 'Standard rideshare seat booking'),
             ('Special Car Hire', 'Sedan', 1500, 200,  30,  1.00, 2000,  'NGN', 'Premium sedan private hire'),
             ('Special Car Hire', 'SUV',  2500,  250,  40,  1.00, 3000,  'NGN', 'Premium SUV private hire'),
             ('Airport Pickup', 'Any',   8000,  200,  30,  1.00,10000,  'NGN', 'Airport transfer standard'),

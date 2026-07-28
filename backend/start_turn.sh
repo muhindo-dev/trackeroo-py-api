@@ -28,7 +28,7 @@ if [ -z "$LOCAL_IP" ]; then
 fi
 
 echo "========================================"
-echo "  NegoRide TURN Server"
+echo "  Truckfully TURN Server"
 echo "  Listening on:  0.0.0.0:3478"
 echo "  External IP:   $LOCAL_IP"
 echo "  Credentials:   negoride / negoride2026"

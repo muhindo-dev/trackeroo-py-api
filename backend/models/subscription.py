@@ -3,7 +3,7 @@ from backend.models import db
 
 
 class SubscriptionPlan(db.Model):
-    """A driver subscription plan. Payment mode for Truckeroo is subscription:
+    """A driver subscription plan. Payment mode for Truckfully is subscription:
     drivers pay a recurring fee and keep their trip earnings.
     """
 

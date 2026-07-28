@@ -1,4 +1,4 @@
-"""Driver subscription endpoints — Truckeroo's payment mode is subscription.
+"""Driver subscription endpoints — Truckfully's payment mode is subscription.
 
   GET  /api/subscription-plans         — list active plans
   GET  /api/subscriptions/status       — my current subscription status
@@ -225,10 +225,10 @@ def subscribe(user):
         result = flw.initialize_payment(
             amount=float(plan.amount or 0),
             tx_ref=tx_ref,
-            customer_name=user.name or 'Truckeroo Driver',
-            customer_email=user.email or f"driver_{user.id}@truckeroo.com",
+            customer_name=user.name or 'Truckfully Driver',
+            customer_email=user.email or f"driver_{user.id}@truckfully.com",
             customer_phone=user.phone_number or '',
-            description=f"Truckeroo {plan.name} subscription",
+            description=f"Truckfully {plan.name} subscription",
             redirect_url=f"{app_url}/api/flutterwave/callback" if app_url else None,
             meta={'type': 'subscription', 'subscription_id': sub.id, 'driver_id': user.id},
         )

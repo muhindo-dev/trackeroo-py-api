@@ -13,7 +13,7 @@ location_bp = Blueprint('location', __name__)
 def _subscription_block(user, going_online):
     """Return an error_response if a driver may not go online, else None.
 
-    Truckeroo's payment mode is subscription: a driver can only go online with
+    Truckfully's payment mode is subscription: a driver can only go online with
     an active subscription. Customers/owners who aren't drivers are unaffected.
     """
     if not going_online:

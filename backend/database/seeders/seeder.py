@@ -1,4 +1,4 @@
-"""Database seeder for Truckeroo's new commercial model.
+"""Database seeder for Truckfully's new commercial model.
 
 Seeds (idempotently, keyed on unique codes/types):
   * vehicle_categories  — the client's truck categories + Boda + Special Hire cars

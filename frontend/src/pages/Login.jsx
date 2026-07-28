@@ -36,7 +36,7 @@ export default function Login() {
           </div>
           <div className="login-logo">
             <span className="logo-mark">NR</span>
-            <h1>NegoRide Canada</h1>
+            <h1>Truckfully</h1>
           </div>
           <p className="login-subtitle">Admin Dashboard</p>
           <p className="login-description">
@@ -56,7 +56,7 @@ export default function Login() {
               <input
                 id="email"
                 type="email"
-                placeholder="admin@negoride.ca"
+                placeholder="admin@truckfully.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

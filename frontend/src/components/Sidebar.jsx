@@ -31,9 +31,9 @@ export default function Sidebar({ open, onClose }) {
       <div className="sidebar-overlay" onClick={onClose} />
       <nav className={`sidebar ${open ? 'sidebar--open' : ''}`}>
         <div className="sidebar-brand">
-          <div className="brand-mark">N</div>
+          <div className="brand-mark">T</div>
           <div className="brand-info">
-            <span className="brand-text">NegoRide</span>
+            <span className="brand-text">Truckfully</span>
             <span className="brand-tag">Admin Panel</span>
           </div>
           <button className="sidebar-close" onClick={onClose}><FiX /></button>
@@ -53,7 +53,7 @@ export default function Sidebar({ open, onClose }) {
             </li>
           ))}
         </ul>
-        <div className="sidebar-footer">NegoRide Canada © 2025</div>
+        <div className="sidebar-footer">Truckfully © 2025</div>
       </nav>
     </>
   );

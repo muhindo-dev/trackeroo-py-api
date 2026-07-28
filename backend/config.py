@@ -57,7 +57,7 @@ class Config:
 
     # App URL
     APP_URL = os.getenv('APP_URL', 'https://negoride.ugnews24.info')
-    APP_NAME = os.getenv('APP_NAME', 'Truckeroo Nigeria')
+    APP_NAME = os.getenv('APP_NAME', 'Truckfully')
 
     # SMTP / Email
     MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -66,5 +66,5 @@ class Config:
     MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'false').lower() == 'true'
     MAIL_USERNAME = os.getenv('MAIL_USERNAME', '')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')
-    MAIL_FROM_NAME = os.getenv('MAIL_FROM_NAME', 'Truckeroo Nigeria')
+    MAIL_FROM_NAME = os.getenv('MAIL_FROM_NAME', 'Truckfully')
     MAIL_FROM_ADDRESS = os.getenv('MAIL_FROM_ADDRESS', os.getenv('MAIL_USERNAME', ''))

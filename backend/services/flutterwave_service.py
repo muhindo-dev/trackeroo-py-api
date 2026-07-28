@@ -1,5 +1,5 @@
 """
-Flutterwave Payment Service — Truckeroo Nigeria
+Flutterwave Payment Service — Truckfully
 
 Replaces Stripe. Handles:
   • Hosted payment page initiation (standard checkout)
@@ -29,7 +29,7 @@ class FlutterwaveError(Exception):
 
 
 class FlutterwaveService:
-    """Core Flutterwave integration for Truckeroo Nigeria."""
+    """Core Flutterwave integration for Truckfully."""
 
     BASE_URL = "https://api.flutterwave.com/v3"
 
@@ -112,7 +112,7 @@ class FlutterwaveService:
         customer_email: str,
         customer_phone: str,
         redirect_url: str = None,
-        description: str = 'Truckeroo Payment',
+        description: str = 'Truckfully Payment',
         currency: str = None,
         payment_options: str = None,
         meta: dict = None,
@@ -129,12 +129,12 @@ class FlutterwaveService:
             'redirect_url': redirect_url or f"{self._app_url}/api/flutterwave/callback",
             'payment_options': payment_options or self._payment_options,
             'customer': {
-                'email': customer_email or f"customer_{tx_ref}@truckeroo.com",
+                'email': customer_email or f"customer_{tx_ref}@truckfully.com",
                 'phonenumber': self._normalize_phone(customer_phone),
-                'name': customer_name or 'Truckeroo Customer',
+                'name': customer_name or 'Truckfully Customer',
             },
             'customizations': {
-                'title': 'Truckeroo Nigeria',
+                'title': 'Truckfully',
                 'description': description,
                 'logo': f"{self._app_url}/uploads/images/truckero.png",
             },

@@ -1,4 +1,4 @@
-"""Migration 0012: subscription_plans + subscriptions — Truckeroo's payment mode
+"""Migration 0012: subscription_plans + subscriptions — Truckfully's payment mode
 is subscription: drivers pay a recurring fee and keep their trip earnings."""
 
 

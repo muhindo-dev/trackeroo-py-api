@@ -307,7 +307,7 @@ def users_reset_password(user, user_id):
         return error_response("User not found", status_code=404)
 
     data = request.get_json(silent=True) or request.form
-    new_password = data.get('new_password', 'NegoRide123!')
+    new_password = data.get('new_password', 'Truckfully123!')
     target.set_password(new_password)
     target.updated_at = datetime.utcnow()
     db.session.commit()
