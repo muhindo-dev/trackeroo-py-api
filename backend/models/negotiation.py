@@ -55,6 +55,15 @@ class Negotiation(db.Model):
     flw_payment_type = db.Column(db.String(100), nullable=True)
     flw_verified_at = db.Column(db.DateTime, nullable=True)
 
+    # Trip progress. Separate from `status` so both sides can see "driver has
+    # arrived" without inventing a state older clients wouldn't understand.
+    driver_arrived_at = db.Column(db.DateTime, nullable=True)
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    cancelled_by = db.Column(db.String(20), nullable=True)   # driver|customer|system
+    cancel_reason = db.Column(db.Text, nullable=True)
+    chat_head_id = db.Column(db.BigInteger, nullable=True)
+
     # Book for later — NULL means "right now" (the normal instant ride).
     scheduled_at = db.Column(db.DateTime, nullable=True)
     schedule_note = db.Column(db.Text, nullable=True)
@@ -70,16 +79,22 @@ class Negotiation(db.Model):
         # Fetch phone numbers from related users
         driver_phone = ''
         customer_phone = ''
+        driver_avatar = ''
+        customer_avatar = ''
+        driver_rating = 0.0
         try:
             from backend.models.user import AdminUser
             if self.driver_id:
                 driver = AdminUser.query.get(self.driver_id)
                 if driver:
                     driver_phone = driver.phone_number or ''
+                    driver_avatar = driver.avatar or ''
+                    driver_rating = float(driver.rating or 0)
             if self.customer_id:
                 customer = AdminUser.query.get(self.customer_id)
                 if customer:
                     customer_phone = customer.phone_number or ''
+                    customer_avatar = customer.avatar or ''
         except Exception:
             pass
 
@@ -137,7 +152,16 @@ class Negotiation(db.Model):
             'stripe_paid': self.stripe_paid,
             'driver_phone': driver_phone,
             'customer_phone': customer_phone,
+            'driver_avatar': driver_avatar,
+            'customer_avatar': customer_avatar,
+            'driver_rating': driver_rating,
             'scheduled_at': my_date_time(self.scheduled_at),
+            'driver_arrived_at': my_date_time(self.driver_arrived_at),
+            'started_at': my_date_time(self.started_at),
+            'completed_at': my_date_time(self.completed_at),
+            'cancelled_by': self.cancelled_by,
+            'cancel_reason': self.cancel_reason,
+            'chat_head_id': self.chat_head_id,
             'schedule_note': self.schedule_note,
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),

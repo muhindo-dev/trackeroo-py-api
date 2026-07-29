@@ -466,12 +466,41 @@ def respond(user, ride_id):
     if not negotiation:
         return error_response("Ride not found", status_code=404)
     dispatch = RideDispatch.query.filter_by(negotiation_id=ride_id).first()
-    if not dispatch or dispatch.status not in ('offered', 'searching'):
-        return error_response("This ride is not awaiting a response")
+
+    # Everything below is a race a real fleet hits constantly: two drivers
+    # tapping at once, an offer that lapsed while the screen was open, a
+    # customer who gave up. Each needs its own message — "not awaiting a
+    # response" tells the driver nothing.
+    if negotiation.status == 'Cancelled':
+        return error_response("The customer cancelled this request",
+                              data={'reason': 'cancelled'})
+    if negotiation.status in ('Accepted', 'Started', 'Completed') \
+            and negotiation.driver_id != user.id:
+        return error_response("Another driver already took this ride",
+                              data={'reason': 'taken'})
+    if not dispatch:
+        return error_response("This ride is not awaiting a response",
+                              data={'reason': 'gone'})
     if negotiation.driver_id != user.id:
-        return error_response("This offer is not assigned to you", status_code=403)
+        return error_response("This offer has moved to another driver",
+                              data={'reason': 'passed_on'}, status_code=403)
+    if dispatch.status not in ('offered', 'searching'):
+        return error_response(
+            "This offer is no longer open" if dispatch.status != 'matched'
+            else "This ride is already assigned",
+            data={'reason': dispatch.status})
 
     action = (request.get_json(silent=True) or request.form or {}).get('action', 'accept')
+
+    # An expired offer must not be acceptable — the customer has already been
+    # told we moved on, and the next driver may be looking at it right now.
+    if action == 'accept' and dispatch.offer_expires_at \
+            and dispatch.offer_expires_at < datetime.utcnow():
+        _advance(dispatch, negotiation)
+        db.session.commit()
+        return error_response("That request timed out and moved on",
+                              data={'reason': 'expired'})
+
     if action == 'accept':
         negotiation.status = 'Accepted'
         negotiation.customer_driver = 'Accepted'
@@ -675,6 +704,209 @@ def dispatch_due():
     db.session.commit()
     return success_response("Due rides dispatched",
                             {'started': started, 'with_candidates': matched})
+
+
+# ── Driver trip lifecycle ────────────────────────────────────────────────────
+# Accepted → (arrived) → Started → Completed. `arrived` is a timestamp rather
+# than a status so older clients keep working while both apps can show it.
+
+def _load_for_driver(user, ride_id):
+    """Returns (negotiation, error_response). Driver-only guard."""
+    n = db.session.get(Negotiation, ride_id)
+    if not n:
+        return None, error_response("Ride not found", status_code=404)
+    if n.driver_id != user.id:
+        return None, error_response("This trip is not yours", status_code=403)
+    return n, None
+
+
+@rides_bp.route('/api/rides/<int:ride_id>/arrived', methods=['POST'])
+@jwt_required_with_user
+def driver_arrived(user, ride_id):
+    """Driver reached the pickup point."""
+    n, err = _load_for_driver(user, ride_id)
+    if err:
+        return err
+    if n.status not in ('Accepted', 'Started'):
+        return error_response(f"Cannot mark arrival — the trip is {n.status}")
+    if not n.driver_arrived_at:
+        n.driver_arrived_at = datetime.utcnow()
+        db.session.commit()
+        try:
+            notify_user(n.customer_id, "Your driver has arrived 🚗",
+                        f"{n.driver_name or 'Your driver'} is waiting at the pickup point.",
+                        {'type': 'ride_driver_arrived', 'negotiation_id': n.id})
+        except Exception:
+            pass
+    return success_response("Arrival recorded", n.to_dict())
+
+
+@rides_bp.route('/api/rides/<int:ride_id>/start', methods=['POST'])
+@jwt_required_with_user
+def driver_start(user, ride_id):
+    """Customer is on board — the trip begins."""
+    n, err = _load_for_driver(user, ride_id)
+    if err:
+        return err
+    if n.status == 'Started':
+        return success_response("Trip already started", n.to_dict())
+    if n.status != 'Accepted':
+        return error_response(f"Cannot start — the trip is {n.status}")
+
+    n.status = 'Started'
+    n.is_active = 'Yes'
+    n.started_at = datetime.utcnow()
+    if not n.driver_arrived_at:
+        n.driver_arrived_at = n.started_at
+    from backend.routes.negotiations import _set_driver_busy
+    _set_driver_busy(n.driver_id)
+    db.session.commit()
+    try:
+        notify_user(n.customer_id, "Trip started",
+                    "You're on your way. Have a safe trip!",
+                    {'type': 'ride_started', 'negotiation_id': n.id})
+    except Exception:
+        pass
+    return success_response("Trip started", n.to_dict())
+
+
+@rides_bp.route('/api/rides/<int:ride_id>/complete', methods=['POST'])
+@jwt_required_with_user
+def driver_complete(user, ride_id):
+    """Trip finished — credit the driver and free them for the next ride."""
+    n, err = _load_for_driver(user, ride_id)
+    if err:
+        return err
+    if n.status == 'Completed':
+        return success_response("Trip already completed", n.to_dict())
+    if n.status not in ('Started', 'Accepted'):
+        return error_response(f"Cannot complete — the trip is {n.status}")
+
+    from backend.routes.negotiations import _credit_driver_earning, _free_driver
+    n.status = 'Completed'
+    n.is_active = 'No'
+    n.completed_at = datetime.utcnow()
+    _credit_driver_earning(n)
+    _free_driver(n.driver_id)
+    db.session.commit()
+    try:
+        notify_user(n.customer_id, "Trip completed",
+                    "Thanks for riding with Truckfully. Rate your driver?",
+                    {'type': 'ride_completed', 'negotiation_id': n.id})
+    except Exception:
+        pass
+    return success_response("Trip completed", n.to_dict())
+
+
+@rides_bp.route('/api/rides/<int:ride_id>/driver-cancel', methods=['POST'])
+@jwt_required_with_user
+def driver_cancel(user, ride_id):
+    """Driver drops an accepted trip. Records who cancelled and why, frees the
+    driver, and tells the customer so they can request again."""
+    n, err = _load_for_driver(user, ride_id)
+    if err:
+        return err
+    if n.status in ('Completed', 'Cancelled'):
+        return error_response(f"Trip already {n.status}")
+
+    data = request.get_json(silent=True) or request.form or {}
+    reason = (data.get('reason') or '').strip()[:255] or 'Driver cancelled'
+
+    from backend.routes.negotiations import _free_driver
+    n.status = 'Cancelled'
+    n.is_active = 'No'
+    n.cancelled_by = 'driver'
+    n.cancel_reason = reason
+    _free_driver(n.driver_id)
+    dispatch = RideDispatch.query.filter_by(negotiation_id=ride_id).first()
+    if dispatch:
+        dispatch.status = 'cancelled'
+    db.session.commit()
+    try:
+        notify_user(n.customer_id, "Your driver cancelled",
+                    f"{reason}. Tap to request another driver.",
+                    {'type': 'ride_driver_cancelled', 'negotiation_id': n.id})
+    except Exception:
+        pass
+    return success_response("Trip cancelled", n.to_dict())
+
+
+@rides_bp.route('/api/rides/active', methods=['GET'])
+@jwt_required_with_user
+def active_ride(user):
+    """The caller's current ride, for either side.
+
+    This is what lets both apps recover after a crash, a force-quit or a phone
+    restart — without it a driver mid-trip has no way back into the trip screen.
+    """
+    q = Negotiation.query.filter(
+        db.or_(Negotiation.driver_id == user.id, Negotiation.customer_id == user.id),
+        Negotiation.status.in_(['Active', 'Accepted', 'Started']),
+    ).order_by(Negotiation.id.desc())
+
+    n = q.first()
+    if not n:
+        return success_response("No active ride", None)
+
+    dispatch = RideDispatch.query.filter_by(negotiation_id=n.id).first()
+    payload = _status_payload(n, dispatch)
+    payload['role'] = 'driver' if n.driver_id == user.id else 'customer'
+    # A pending offer is only actionable while it is still assigned and unexpired.
+    payload['is_pending_offer'] = bool(
+        dispatch and dispatch.status == 'offered'
+        and n.driver_id == user.id
+        and n.customer_driver != 'Accepted'
+    )
+    if dispatch and dispatch.offer_expires_at:
+        payload['offer_seconds_left'] = max(
+            0, int((dispatch.offer_expires_at - datetime.utcnow()).total_seconds()))
+    return success_response("Active ride", payload)
+
+
+@rides_bp.route('/api/rides/<int:ride_id>/chat', methods=['POST'])
+@jwt_required_with_user
+def ride_chat(user, ride_id):
+    """Get (or open) the conversation between the two people on this ride."""
+    n = db.session.get(Negotiation, ride_id)
+    if not n:
+        return error_response("Ride not found", status_code=404)
+    if user.id not in (n.driver_id, n.customer_id):
+        return error_response("You are not on this ride", status_code=403)
+    if not n.driver_id or not n.customer_id:
+        return error_response("This ride has no driver yet")
+
+    from backend.models.chat_head import ChatHead
+    head = ChatHead.query.filter_by(id=n.chat_head_id).first() if n.chat_head_id else None
+    if head is None:
+        head = ChatHead.query.filter(
+            db.or_(
+                db.and_(ChatHead.product_owner_id == n.driver_id,
+                        ChatHead.customer_id == n.customer_id),
+                db.and_(ChatHead.product_owner_id == n.customer_id,
+                        ChatHead.customer_id == n.driver_id),
+            )
+        ).first()
+
+    if head is None:
+        head = ChatHead(
+            product_owner_id=n.driver_id,
+            customer_id=n.customer_id,
+            product_owner_name=n.driver_name,
+            customer_name=n.customer_name,
+            product_name=f"Trip #{n.id}",
+        )
+        db.session.add(head)
+        db.session.flush()
+
+    n.chat_head_id = head.id
+    db.session.commit()
+
+    other_id = n.customer_id if user.id == n.driver_id else n.driver_id
+    return success_response("Chat ready", {
+        'chat_head_id': head.id,
+        'receiver_id': other_id,
+        'ride_id': n.id,
+    })
 
 
 @rides_bp.route('/api/drivers/<int:driver_id>/card', methods=['GET'])
