@@ -9,7 +9,9 @@ class DriverRating(db.Model):
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     customer_id = db.Column(db.BigInteger, nullable=False)
     driver_id = db.Column(db.BigInteger, nullable=False)
-    booking_id = db.Column(db.BigInteger, nullable=False)
+    # NULL for instant rides — they have no booking, and 0 would collide
+    # under UNIQUE(customer_id, booking_id).
+    booking_id = db.Column(db.BigInteger, nullable=True)
     negotiation_id = db.Column(db.BigInteger, nullable=True)
     rating = db.Column(db.SmallInteger, nullable=False)
     comment = db.Column(db.Text, nullable=True)
@@ -24,10 +26,15 @@ class DriverRating(db.Model):
     @staticmethod
     def get_driver_stats(driver_id: int) -> dict:
         """Return average rating and total count for a driver."""
+        # Only ratings the CUSTOMER gave — rows where this driver was the
+        # rater must not count toward their own score.
         result = db.session.query(
             func.avg(DriverRating.rating).label('avg'),
             func.count(DriverRating.id).label('count'),
-        ).filter_by(driver_id=driver_id).first()
+        ).filter(
+            DriverRating.driver_id == driver_id,
+            DriverRating.rated_by == 'customer',
+        ).first()
         avg = float(result.avg) if result.avg else None
         return {
             'average_rating': round(avg, 2) if avg else None,

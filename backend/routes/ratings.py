@@ -48,7 +48,7 @@ def submit_rating(user):
 
         rating = DriverRating(
             customer_id=neg.customer_id, driver_id=neg.driver_id,
-            booking_id=0, negotiation_id=negotiation_id,
+            booking_id=None, negotiation_id=negotiation_id,
             rating=rating_val, comment=comment or None,
             rated_by=rated_by,
         )
@@ -122,9 +122,9 @@ def submit_rating(user):
 def driver_ratings(driver_id):
     """Get all ratings for a driver with stats."""
     stats = DriverRating.get_driver_stats(driver_id)
-    recent = DriverRating.query.filter_by(driver_id=driver_id).order_by(
-        DriverRating.created_at.desc()
-    ).limit(20).all()
+    recent = DriverRating.query.filter_by(
+        driver_id=driver_id, rated_by='customer'
+    ).order_by(DriverRating.created_at.desc()).limit(20).all()
 
     return success_response("Success", {
         **stats,
