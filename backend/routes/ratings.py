@@ -33,29 +33,41 @@ def submit_rating(user):
         neg = Negotiation.query.get(negotiation_id)
         if not neg:
             return error_response("Trip not found", status_code=404)
-        if neg.customer_id != user.id:
+        if user.id not in (neg.customer_id, neg.driver_id):
             return error_response("You can only rate your own trips", status_code=403)
         if neg.status != 'Completed':
             return error_response("You can only rate completed trips")
         if not neg.driver_id:
             return error_response("No driver on this trip")
-        if DriverRating.query.filter_by(customer_id=user.id,
-                                        negotiation_id=negotiation_id).first():
+
+        # Both sides rate each other; the same row records who spoke.
+        rated_by = 'driver' if user.id == neg.driver_id else 'customer'
+        if DriverRating.query.filter_by(negotiation_id=negotiation_id,
+                                        rated_by=rated_by).first():
             return error_response("You have already rated this trip")
 
         rating = DriverRating(
-            customer_id=user.id, driver_id=neg.driver_id,
+            customer_id=neg.customer_id, driver_id=neg.driver_id,
             booking_id=0, negotiation_id=negotiation_id,
             rating=rating_val, comment=comment or None,
+            rated_by=rated_by,
         )
         db.session.add(rating)
-        new_avg = db.session.query(func.avg(DriverRating.rating)).filter_by(
-            driver_id=neg.driver_id).scalar() or rating_val
-        driver = AdminUser.query.get(neg.driver_id)
-        if driver:
-            driver.rating = round(float(new_avg), 2)
+
+        # Recompute only the rated party's average, from ratings of that
+        # direction — mixing the two would let a driver inflate their own score.
+        rated_user_id = neg.customer_id if rated_by == 'driver' else neg.driver_id
+        new_avg = db.session.query(func.avg(DriverRating.rating)).filter(
+            DriverRating.rated_by == rated_by,
+            (DriverRating.customer_id if rated_by == 'driver'
+             else DriverRating.driver_id) == rated_user_id,
+        ).scalar() or rating_val
+        rated_user = AdminUser.query.get(rated_user_id)
+        if rated_user:
+            rated_user.rating = round(float(new_avg), 2)
         db.session.commit()
-        return success_response("Rating submitted. Thank you!", rating.to_dict(), status_code=201)
+        return success_response("Rating submitted. Thank you!",
+                                rating.to_dict(), status_code=201)
 
     if not booking_id:
         return error_response("booking_id or negotiation_id is required")

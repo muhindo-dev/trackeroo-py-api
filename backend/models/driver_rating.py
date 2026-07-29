@@ -13,6 +13,8 @@ class DriverRating(db.Model):
     negotiation_id = db.Column(db.BigInteger, nullable=True)
     rating = db.Column(db.SmallInteger, nullable=False)
     comment = db.Column(db.Text, nullable=True)
+    # 'customer' = customer rated the driver; 'driver' = driver rated the customer.
+    rated_by = db.Column(db.String(10), nullable=False, default='customer')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __table_args__ = (
@@ -38,7 +40,9 @@ class DriverRating(db.Model):
             'customer_id': self.customer_id,
             'driver_id': self.driver_id,
             'booking_id': self.booking_id,
+            'negotiation_id': self.negotiation_id,
             'rating': self.rating,
             'comment': self.comment,
+            'rated_by': self.rated_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
