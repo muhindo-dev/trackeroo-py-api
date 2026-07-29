@@ -8,6 +8,7 @@ class RideDispatch(db.Model):
     drivers, which one currently holds the offer, and the offer deadline.
 
     Status: searching → offered → matched | no_match | cancelled
+    Booked for later: scheduled → (due) → offered → …
     """
 
     __tablename__ = 'ride_dispatches'
@@ -20,6 +21,8 @@ class RideDispatch(db.Model):
     candidates = db.Column(db.Text, nullable=True)  # JSON list of driver ids, ranked
     current_index = db.Column(db.Integer, default=0)
     offer_expires_at = db.Column(db.DateTime, nullable=True)
+    # Set for "book for later": dispatch waits here until the pickup time is due.
+    scheduled_at = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(20), default='searching')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -45,5 +48,6 @@ class RideDispatch(db.Model):
             'candidates': self.candidate_list(),
             'current_index': self.current_index or 0,
             'offer_expires_at': self.offer_expires_at.isoformat() if self.offer_expires_at else None,
+            'scheduled_at': self.scheduled_at.isoformat() if self.scheduled_at else None,
             'status': self.status,
         }

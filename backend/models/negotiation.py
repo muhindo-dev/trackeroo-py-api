@@ -55,6 +55,10 @@ class Negotiation(db.Model):
     flw_payment_type = db.Column(db.String(100), nullable=True)
     flw_verified_at = db.Column(db.DateTime, nullable=True)
 
+    # Book for later — NULL means "right now" (the normal instant ride).
+    scheduled_at = db.Column(db.DateTime, nullable=True)
+    schedule_note = db.Column(db.Text, nullable=True)
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -133,6 +137,8 @@ class Negotiation(db.Model):
             'stripe_paid': self.stripe_paid,
             'driver_phone': driver_phone,
             'customer_phone': customer_phone,
+            'scheduled_at': my_date_time(self.scheduled_at),
+            'schedule_note': self.schedule_note,
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),
         }
