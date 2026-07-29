@@ -16,3 +16,6 @@ backend/uploads/documents/*
 vps-credentials.txt
 negoride_db_dump.sql
 .env.production
+
+# Deployment note (server-admin summary) — not for git
+DEPLOYMENT_NOTE_FOR_ADMIN.md
