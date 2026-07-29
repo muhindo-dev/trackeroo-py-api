@@ -91,6 +91,9 @@ class AdminUser(db.Model):
     available_from = db.Column(db.DateTime, nullable=True)
     live_service_group = db.Column(db.String(50), nullable=True)  # group driver went live for
     busy_until = db.Column(db.DateTime, nullable=True)
+    # Last time the driver's app reported a position. Dispatch treats a stale
+    # value as offline — see rides._online_drivers.
+    location_updated_at = db.Column(db.DateTime, nullable=True)
 
     # Relationships
     wallet = db.relationship('UserWallet', backref='user', uselist=False, lazy=True)
@@ -185,6 +188,7 @@ class AdminUser(db.Model):
             'available_from': my_date_time(self.available_from) if self.available_from else None,
             'live_service_group': self.live_service_group,
             'busy_until': my_date_time(self.busy_until) if self.busy_until else None,
+            'location_updated_at': my_date_time(self.location_updated_at) if self.location_updated_at else None,
             'created_at': my_date_time(self.created_at),
             'updated_at': my_date_time(self.updated_at),
         }

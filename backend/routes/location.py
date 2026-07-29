@@ -51,6 +51,7 @@ def go_on_off(user):
     # ready_for_trip is the real DB column (varchar 'Yes'/'No')
     user.current_latitude = lati
     user.current_longitude = long_
+    user.location_updated_at = datetime.utcnow()
     user.current_address = f"{lati},{long_}"
     user.ready_for_trip = 'Yes' if status == 'online' else 'No'
     # V2: capture the service group the driver goes live for
@@ -80,6 +81,7 @@ def update_online_status(user):
         user.current_latitude = lat
     if lng:
         user.current_longitude = lng
+        user.location_updated_at = datetime.utcnow()
 
     if status:
         if status not in ('online', 'offline'):
@@ -124,6 +126,7 @@ def refresh_status(user):
         user.current_latitude = lati
     if long_:
         user.current_longitude = long_
+        user.location_updated_at = datetime.utcnow()
 
     # Check for active trip (negotiation)
     active_trip = Negotiation.query.filter(
@@ -160,6 +163,7 @@ def update_location(user):
 
     user.current_latitude = str(lat)
     user.current_longitude = str(lng)
+    user.location_updated_at = datetime.utcnow()
     db.session.commit()
 
     return success_response("Success", {
@@ -204,6 +208,7 @@ def update_location_alt(user):
         user.current_latitude = str(lat)
     if lng:
         user.current_longitude = str(lng)
+        user.location_updated_at = datetime.utcnow()
     db.session.commit()
 
     return success_response("Success", {

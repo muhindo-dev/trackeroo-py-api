@@ -39,6 +39,9 @@ RING1_KM = 5.0
 RING2_KM = 10.0
 PROPOSAL_KM = 15.0          # radius for "no match" manual proposals
 CITY_SPEED_KMH = 25.0       # ETA model
+# A driver whose app hasn't reported a position in this long is treated as
+# gone, whatever their online flag says.
+LOCATION_STALE_MINUTES = 15
 
 # Sanity limits. A bad/stale GPS fix (e.g. an emulator sitting in California
 # while the destination is in Lagos) used to produce a 16,000 km trip whose
@@ -119,13 +122,22 @@ def _eta_min(km):
 
 
 def _online_drivers(service_group):
-    """Online, subscribed, not-busy drivers live for this service group."""
+    """Online, subscribed, not-busy drivers live for this service group.
+
+    'ready_for_trip' alone is not proof of reachability — a driver who
+    force-quits stays flagged online forever, swallows offers and never
+    answers, costing every customer a full offer window per dead session.
+    A recent location report is the honest signal that an app is running.
+    """
     now = datetime.utcnow()
+    fresh_since = now - timedelta(minutes=LOCATION_STALE_MINUTES)
     q = AdminUser.query.filter(
         AdminUser.ready_for_trip == 'Yes',
         AdminUser.user_type == 'Driver',
         AdminUser.current_latitude.isnot(None),
         AdminUser.current_longitude.isnot(None),
+        AdminUser.location_updated_at.isnot(None),
+        AdminUser.location_updated_at >= fresh_since,
     )
     if service_group:
         q = q.filter(AdminUser.live_service_group == service_group)
