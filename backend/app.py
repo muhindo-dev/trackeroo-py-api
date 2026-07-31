@@ -60,6 +60,7 @@ def create_app():
     from backend.routes.subscriptions import subscriptions_bp
     from backend.routes.pricing import pricing_bp
     from backend.routes.rides import rides_bp
+    from backend.routes.cron import cron_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(profile_bp)
@@ -83,6 +84,7 @@ def create_app():
     app.register_blueprint(subscriptions_bp)
     app.register_blueprint(pricing_bp)
     app.register_blueprint(rides_bp)
+    app.register_blueprint(cron_bp)
 
     # Register Socket.IO call signaling events
     from backend.sockets.call_events import register_call_events

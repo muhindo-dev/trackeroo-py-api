@@ -226,6 +226,10 @@ def create(user):
     if initial_price < 100 or initial_price > 9999900:
         return error_response("Initial price must be between ₦100 and ₦9,999,900")
 
+    pickup_lat = data.get('pickup_lat')
+    if not pickup_lat or str(pickup_lat) == '0.0':
+        return error_response("Invalid pickup location provided. Please select a valid location on the map.")
+
     negotiation = Negotiation(
         customer_id=user.id,
         customer_name=user.name,
