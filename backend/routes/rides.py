@@ -976,3 +976,222 @@ def driver_card(user, driver_id):
     if not d or d.user_type not in ('Driver', 'Pending Driver'):
         return error_response("Driver not found", status_code=404)
     return success_response("Driver card", _driver_card_dict(d))
+
+
+# ── Negotiation: one read, one write ────────────────────────────────────────
+# The screen previously assembled itself from four endpoints with different
+# shapes (ride status, chat head, chat messages, negotiation records) and had
+# to work out whose turn it was on the client. Every one of those was a chance
+# to disagree with the other side. These two endpoints are the whole contract.
+
+def _neg_price_state(n):
+    """Everything about money in one place, in major units."""
+    from backend.models.negotiation_record import NegotiationRecord
+    rows = (NegotiationRecord.query
+            .filter(NegotiationRecord.negotiation_id == n.id,
+                    NegotiationRecord.price > 0)
+            .order_by(NegotiationRecord.id.asc()).all())
+    agreed = float(n.agreed_price) / 100.0 if n.agreed_price else None
+    opening = (n.initial_price or 0) / 100.0
+    current = agreed if agreed else (
+        rows[-1].price / 100.0 if rows else opening)
+    return {
+        'opening': opening,
+        'current': round(current, 2),
+        'agreed': agreed is not None,
+        'agreed_amount': agreed,
+        'currency': 'NGN',
+        'last_offer_by': rows[-1].last_negotiator_id if rows else n.customer_id,
+        'rounds': len(rows),
+        'history': [{
+            'by': r.last_negotiator_id,
+            'amount': (r.price or 0) / 100.0,
+            'at': r.created_at.isoformat() if r.created_at else None,
+        } for r in rows[-12:]],
+    }
+
+
+@rides_bp.route('/api/rides/<int:ride_id>/negotiation', methods=['GET'])
+@jwt_required_with_user
+def negotiation_state(user, ride_id):
+    """Everything the negotiation screen needs, resolved server-side."""
+    n = db.session.get(Negotiation, ride_id)
+    if not n:
+        return error_response("Ride not found", status_code=404)
+    if user.id not in (n.customer_id, n.driver_id):
+        return error_response("You are not on this ride", status_code=403)
+
+    from backend.models.negotiation_record import NegotiationRecord
+    is_driver = user.id == n.driver_id
+    other_id = n.customer_id if is_driver else n.driver_id
+    other = db.session.get(AdminUser, other_id) if other_id else None
+
+    price = _neg_price_state(n)
+    my_turn = price['last_offer_by'] != user.id and not price['agreed']
+
+    # Who still has to say yes. The customer implicitly accepted their own
+    # opening figure, so only a NEW offer resets that.
+    i_accepted = (n.customer_driver == 'Accepted') if is_driver \
+        else (n.customer_accepted == 'Accepted')
+
+    rows = (NegotiationRecord.query
+            .filter_by(negotiation_id=n.id)
+            .order_by(NegotiationRecord.id.asc()).limit(200).all())
+    messages = [{
+        'id': r.id,
+        'mine': r.last_negotiator_id == user.id,
+        'body': r.message_body,
+        'price': (r.price or 0) / 100.0 if r.price else None,
+        'type': r.message_type,
+        'audio_url': r.audio_url,
+        'at': r.created_at.isoformat() if r.created_at else None,
+    } for r in rows]
+
+    settled = n.status in ('Completed', 'Cancelled')
+    headline = (
+        'Trip ' + n.status.lower() if settled
+        else 'Price agreed' if price['agreed']
+        else 'Your move — accept or counter' if my_turn
+        else 'Waiting for their reply'
+    )
+
+    return success_response("Negotiation", {
+        'ride': {
+            'id': n.id,
+            'status': n.status,
+            'pickup': n.pickup_address,
+            'dropoff': n.dropoff_address,
+            'payment_method': n.payment_method or 'Cash',
+            'driver_arrived': bool(n.driver_arrived_at),
+            'started': bool(n.started_at),
+        },
+        'me': {'id': user.id, 'role': 'driver' if is_driver else 'customer'},
+        'other': {
+            'id': other_id,
+            'name': (other.name if other else None) or
+                    (n.customer_name if is_driver else n.driver_name),
+            'phone': other.phone_number if other else None,
+            'avatar': other.avatar if other else None,
+            'rating': float(other.rating or 0) if other else 0.0,
+        },
+        'price': price,
+        'my_turn': my_turn,
+        'i_accepted': i_accepted,
+        'messages': messages,
+        'actions': {
+            'can_offer': not price['agreed'] and not settled,
+            'can_accept': not price['agreed'] and not settled,
+            'can_message': not settled,
+            'can_arrive': is_driver and price['agreed'] and n.status == 'Accepted',
+            'can_start': is_driver and price['agreed'] and n.status == 'Accepted',
+            'can_complete': is_driver and n.status == 'Started',
+            'can_cancel': not settled,
+        },
+        'headline': headline,
+    })
+
+
+@rides_bp.route('/api/rides/<int:ride_id>/negotiation', methods=['POST'])
+@jwt_required_with_user
+def negotiation_act(user, ride_id):
+    """offer | accept | message — one write path, one set of rules."""
+    n = db.session.get(Negotiation, ride_id)
+    if not n:
+        return error_response("Ride not found", status_code=404)
+    if user.id not in (n.customer_id, n.driver_id):
+        return error_response("You are not on this ride", status_code=403)
+    if n.status in ('Completed', 'Cancelled'):
+        return error_response(f"This trip is already {n.status.lower()}")
+
+    from backend.models.negotiation_record import NegotiationRecord
+    data = request.get_json(silent=True) or request.form or {}
+    action = (data.get('action') or 'message').strip()
+    is_driver = user.id == n.driver_id
+
+    if action == 'offer':
+        amount = _num(data.get('price'))
+        if amount <= 0:
+            return error_response("Enter an amount to offer.")
+        if amount > MAX_FARE:
+            return error_response("That amount is outside our limits.")
+        db.session.add(NegotiationRecord(
+            negotiation_id=n.id, customer_id=n.customer_id,
+            driver_id=n.driver_id or 0,
+            last_negotiator_id=user.id,
+            first_negotiator_id=n.customer_id or user.id,
+            price=_price_cents(amount), price_accepted='No',
+            message_type='Negotiation',
+            message_body=(data.get('body') or '').strip()[:500] or None,
+        ))
+        # A new figure reopens the question for BOTH sides.
+        n.agreed_price = None
+        if is_driver:
+            n.customer_driver = 'Accepted'
+            n.customer_accepted = 'Pending'
+        else:
+            n.customer_accepted = 'Accepted'
+            n.customer_driver = 'Pending'
+        db.session.commit()
+        try:
+            notify_user(n.customer_id if is_driver else n.driver_id,
+                        "New price offer",
+                        f"₦{int(amount):,} proposed for your trip.",
+                        {'type': 'ride_offer_price', 'negotiation_id': n.id})
+        except Exception:
+            pass
+        return success_response("Offer sent", _neg_price_state(n))
+
+    if action == 'accept':
+        state = _neg_price_state(n)
+        if state['agreed']:
+            return success_response("Already agreed", state)
+        if state['last_offer_by'] == user.id:
+            return error_response(
+                "That's your own offer — wait for them to respond.")
+        if is_driver:
+            n.customer_driver = 'Accepted'
+        else:
+            n.customer_accepted = 'Accepted'
+        if n.customer_accepted == 'Accepted' and n.customer_driver == 'Accepted':
+            n.agreed_price = _price_cents(state['current'])
+            if n.status == 'Active':
+                n.status = 'Accepted'
+                n.is_active = 'Yes'
+        db.session.add(NegotiationRecord(
+            negotiation_id=n.id, customer_id=n.customer_id,
+            driver_id=n.driver_id or 0,
+            last_negotiator_id=user.id,
+            first_negotiator_id=n.customer_id or user.id,
+            price=_price_cents(state['current']), price_accepted='Yes',
+            message_type='Accept',
+            message_body=f"Accepted ₦{int(state['current']):,}",
+        ))
+        db.session.commit()
+        try:
+            notify_user(n.customer_id if is_driver else n.driver_id,
+                        "Price accepted ✅",
+                        f"₦{int(state['current']):,} agreed for your trip.",
+                        {'type': 'ride_price_agreed', 'negotiation_id': n.id})
+        except Exception:
+            pass
+        return success_response("Price accepted", _neg_price_state(n))
+
+    body = (data.get('body') or '').strip()
+    if not body:
+        return error_response("Nothing to send.")
+    db.session.add(NegotiationRecord(
+        negotiation_id=n.id, customer_id=n.customer_id,
+        driver_id=n.driver_id or 0,
+        last_negotiator_id=user.id,
+        first_negotiator_id=n.customer_id or user.id,
+        price=0, price_accepted='No',
+        message_type='Message', message_body=body[:1000],
+    ))
+    db.session.commit()
+    try:
+        notify_user(n.customer_id if is_driver else n.driver_id,
+                    (n.driver_name if is_driver else n.customer_name) or 'Message',
+                    body[:80], {'type': 'ride_message', 'negotiation_id': n.id})
+    except Exception:
+        pass
+    return success_response("Sent", {'ok': True})
