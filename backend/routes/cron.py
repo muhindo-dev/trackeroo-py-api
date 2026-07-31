@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify
 from datetime import datetime, timedelta
 from backend.models import db
-from backend.models.admin_user import AdminUser
+from backend.models.user import AdminUser
 from backend.models.negotiation import Negotiation
 
 cron_bp = Blueprint('cron', __name__)
