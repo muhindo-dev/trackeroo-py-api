@@ -102,6 +102,7 @@ class Negotiation(db.Model):
         # so clients can render the last two negotiation points consistently.
         last_offer_price = None
         second_last_offer_price = None
+        last_negotiator_id = None
         try:
             from backend.models.negotiation_record import NegotiationRecord
             rows = (
@@ -113,6 +114,7 @@ class Negotiation(db.Model):
             )
             if len(rows) >= 1:
                 last_offer_price = rows[0].price
+                last_negotiator_id = rows[0].last_negotiator_id
             if len(rows) >= 2:
                 second_last_offer_price = rows[1].price
         except Exception:
@@ -141,6 +143,7 @@ class Negotiation(db.Model):
             'initial_price': self.initial_price,
             'agreed_price': float(self.agreed_price) if self.agreed_price else None,
             'last_offer_price': last_offer_price,
+            'last_negotiator_id': last_negotiator_id,
             'second_last_offer_price': second_last_offer_price,
             'payment_status': self.payment_status,
             'payment_id': self.payment_id,

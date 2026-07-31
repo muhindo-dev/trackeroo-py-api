@@ -322,10 +322,17 @@ def request_ride(user):
         return error_response(sched_error)
 
     est = _estimate(category, data)
-    price = _num(est.get('estimate'))
+    suggested = _num(est.get('estimate'))
+
+    # The system price is a STARTING POINT, not a verdict. The customer may
+    # send a different figure, and the driver may counter it — nothing is
+    # binding until both sides accept in the negotiation chat.
+    price = _num(data.get('proposed_price')) or suggested
     if price > MAX_FARE:
         return error_response(
             "That fare is outside our limits — please check the trip details.")
+    if price <= 0:
+        return error_response("Enter a fare to propose.")
 
     payment_method = (data.get('payment_method') or '').strip() or None
     if payment_method and payment_method not in ('MM', 'Visa', 'Cash'):
@@ -353,8 +360,10 @@ def request_ride(user):
         pickup_address=data.get('pickup_address'),
         dropoff_lat=str(_num(data.get('dropoff_lat'))), dropoff_lng=str(_num(data.get('dropoff_lng'))),
         dropoff_address=data.get('dropoff_address'),
-        initial_price=_price_cents(price),      # legacy cents field
-        agreed_price=_price_cents(price),       # fixed system price (cents convention)
+        initial_price=_price_cents(price),      # the customer's opening offer
+        # Deliberately unset: a price only becomes "agreed" when both sides
+        # have accepted it in the negotiation.
+        agreed_price=None,
         status='Scheduled' if scheduled_at else 'Active',
         is_active='Yes',
         customer_accepted='Accepted', customer_driver='Pending',
@@ -365,6 +374,21 @@ def request_ride(user):
     )
     db.session.add(negotiation)
     db.session.flush()
+
+    # Seed the conversation with the customer's opening offer so the driver
+    # opens a negotiation that already has a first price on the table.
+    from backend.models.negotiation_record import NegotiationRecord
+    db.session.add(NegotiationRecord(
+        negotiation_id=negotiation.id,
+        customer_id=user.id,
+        driver_id=candidates[0] if candidates else 0,
+        first_negotiator_id=user.id,
+        last_negotiator_id=user.id,
+        price=_price_cents(price),
+        price_accepted='No',
+        message_type='Negotiation',
+        message_body=(data.get('note') or '').strip()[:500] or None,
+    ))
 
     dispatch = RideDispatch(
         negotiation_id=negotiation.id,
@@ -397,6 +421,8 @@ def request_ride(user):
             'ride_id': negotiation.id,
             'dispatch': dispatch.to_dict(),
             'estimate': price,
+            'suggested_price': suggested,
+            'proposed_price': price,
             'scheduled_at': negotiation.scheduled_at.isoformat() if scheduled_at else None,
             'negotiation': negotiation.to_dict(),
         })
@@ -513,11 +539,22 @@ def respond(user, ride_id):
         return error_response("That request timed out and moved on",
                               data={'reason': 'expired'})
 
-    if action == 'accept':
+    if action in ('accept', 'negotiate'):
+        # Both claim the ride so it stops cascading to other drivers. They
+        # differ only in whether the price is settled: "accept" takes the
+        # customer's figure as agreed, "negotiate" leaves it open.
         negotiation.status = 'Accepted'
-        negotiation.customer_driver = 'Accepted'
+        negotiation.customer_driver = 'Accepted' if action == 'accept' else 'Pending'
         negotiation.is_active = 'Yes'
         dispatch.status = 'matched'
+
+        if action == 'accept':
+            from backend.models.negotiation_record import NegotiationRecord
+            last = (NegotiationRecord.query
+                    .filter_by(negotiation_id=negotiation.id)
+                    .order_by(NegotiationRecord.id.desc()).first())
+            negotiation.agreed_price = (
+                last.price if last and last.price else negotiation.initial_price)
         user.busy_until = datetime.utcnow() + timedelta(minutes=90)
         db.session.commit()
         try:
@@ -526,7 +563,9 @@ def respond(user, ride_id):
                         {'type': 'ride_matched', 'negotiation_id': negotiation.id})
         except Exception:
             pass
-        return success_response("Ride accepted", _status_payload(negotiation, dispatch))
+        return success_response(
+            "Ride accepted" if action == 'accept' else "Opening negotiation",
+            _status_payload(negotiation, dispatch))
 
     # decline → advance to next candidate
     advanced = _advance(dispatch, negotiation)
@@ -764,6 +803,10 @@ def driver_start(user, ride_id):
         return success_response("Trip already started", n.to_dict())
     if n.status != 'Accepted':
         return error_response(f"Cannot start — the trip is {n.status}")
+    if not n.agreed_price:
+        return error_response(
+            "Agree a price with the customer before starting the trip.",
+            data={'reason': 'price_not_agreed'})
 
     n.status = 'Started'
     n.is_active = 'Yes'
