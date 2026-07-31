@@ -411,15 +411,14 @@ def accept(user):
 
     elif message_type == 'Accept':
         # Keep compatibility with existing Flutter calls while enforcing role intent.
-        # A customer creating a negotiation has already implicitly accepted price discovery.
         if user.id == negotiation.driver_id:
             negotiation.customer_driver = 'Accepted'
             # When driver accepts, the customer implicitly agreed (they proposed the price).
-            # Normalize any legacy values ('Yes', '', 'Pending', 'No') to 'Accepted'.
-            if negotiation.customer_accepted != 'Accepted':
-                negotiation.customer_accepted = 'Accepted'
+            negotiation.customer_accepted = 'Accepted'
         elif user.id == negotiation.customer_id:
             negotiation.customer_accepted = 'Accepted'
+            # When customer accepts, it's because they are accepting the driver's counter-offer.
+            negotiation.customer_driver = 'Accepted'
         else:
             return error_response("Forbidden", status_code=403)
 
