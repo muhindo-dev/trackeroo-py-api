@@ -1405,3 +1405,37 @@ def get_rate(user=None):
         'rate': rate.to_dict() if rate else None,
         'estimate': estimate,
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CRON — System Cleanup
+# ═══════════════════════════════════════════════════════════════════════════
+
+@admin_bp.route('/api/cron/cleanup', methods=['POST'])
+def cron_cleanup():
+    """System cleanup cron job (unauthenticated)."""
+    timeout_threshold = datetime.utcnow() - timedelta(minutes=30)
+    
+    # Update drivers who haven't sent a beat in 30 mins
+    drivers_updated = AdminUser.query.filter(
+        AdminUser.user_type == 'Driver',
+        AdminUser.ready_for_trip == 'Yes',
+        or_(
+            AdminUser.location_updated_at < timeout_threshold,
+            AdminUser.location_updated_at.is_(None)
+        )
+    ).update({'ready_for_trip': 'No'})
+
+    # Update active negotiations with no activity in 30 mins
+    negs_updated = Negotiation.query.filter(
+        Negotiation.status == 'Active',
+        Negotiation.updated_at < timeout_threshold
+    ).update({'status': 'Cancelled'})
+
+    db.session.commit()
+    
+    return success_response("Cleanup complete", {
+        "drivers_offline": drivers_updated,
+        "negotiations_cancelled": negs_updated
+    })
+
