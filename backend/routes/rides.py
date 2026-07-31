@@ -305,6 +305,15 @@ def quote(user):
 def request_ride(user):
     """Create an instant ride and auto-offer it to the fairest nearby driver."""
     data = request.get_json(silent=True) or request.form or {}
+    
+    # Check if user already has an active ride
+    active_ride = Negotiation.query.filter_by(
+        customer_id=user.id,
+        is_active='Yes'
+    ).first()
+    if active_ride:
+        return error_response("You already have an active ride in progress.")
+        
     category = _resolve_category(data)
     if not category:
         return error_response("Valid category_id or category_code is required")
@@ -411,10 +420,12 @@ def request_ride(user):
     try:
         db.session.commit()
     except Exception as exc:                     # never leak a raw 500
+        import logging
+        logging.error(f"Failed to create ride: {exc}")
         db.session.rollback()
         return error_response(
             "We couldn't create that ride. Please check the trip details and try again.",
-            data={'detail': str(exc)[:200]}, status_code=400)
+            status_code=400)
 
     return success_response(
         "Ride scheduled" if scheduled_at else "Ride requested", {

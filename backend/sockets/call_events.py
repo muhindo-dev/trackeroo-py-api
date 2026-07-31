@@ -1,6 +1,10 @@
 """
 Socket.IO signaling event handlers for WebRTC calling.
 
+IMPORTANT LIMITATION: In-memory state (user_sockets, active_calls, etc.) means this 
+will not work out-of-the-box across multiple server instances (e.g. gunicorn with multiple workers). 
+A Redis-based approach or similar pub/sub would be needed for a distributed environment.
+
 Architecture:
     - All media (audio/video) flows peer-to-peer via WebRTC.
     - This server only relays signaling messages: offers, answers, ICE candidates.
@@ -141,7 +145,8 @@ def _end_call_session(session_id, reason='normal'):
                         )
                     db.session.commit()
             except Exception as e:
-                print(f'[Call] Failed to update call log: {e}', flush=True)
+                import logging
+                logging.error(f'[Call] Failed to update call log: {e}')
 
 
 def _cleanup_call_tracking(user_id, partner_id=None):
@@ -250,7 +255,8 @@ def register_call_events(socketio, app):
                 user_sockets[user_id] = sid
                 user_sockets_reverse[sid] = user_id
 
-                print(f'[Call] User {user_id} ({user.name}) authenticated (sid={sid[:8]}...)', flush=True)
+                import logging
+                logging.info(f'[Call] User {user_id} ({user.name}) authenticated (sid={sid[:8]}...)')
 
                 emit('authenticated', {
                     'user_id': user_id,
@@ -261,7 +267,8 @@ def register_call_events(socketio, app):
                 _handle_user_reconnect(user_id, socketio, app)
 
             except Exception as e:
-                print(f'[Call] Auth failed: {e}', flush=True)
+                import logging
+                logging.error(f'[Call] Auth failed: {e}')
                 emit('auth_error', {'error': 'Invalid token'})
 
     # ─── Call Initiation ─────────────────────────────────
@@ -359,7 +366,8 @@ def register_call_events(socketio, app):
                                     call_log.end_reason = 'no_answer'
                                     db.session.commit()
                             except Exception as e:
-                                print(f'[Call] Failed to mark ring-timeout log: {e}', flush=True)
+                                import logging
+                                logging.error(f'[Call] Failed to mark ring-timeout log: {e}')
 
                         caller_sid = get_user_sid(caller_id)
                         callee_sid = get_user_sid(target_id)
@@ -380,15 +388,16 @@ def register_call_events(socketio, app):
 
             caller_info = _get_user_info(caller_id)
 
-            print(f'[Call] === CALL_USER ===', flush=True)
-            print(f'[Call]   {caller_info["name"]} ({caller_id}) → {target_id} ({call_type})', flush=True)
-            print(f'[Call]   negotiation_id={negotiation_id}', flush=True)
-            print(f'[Call]   call_id={data.get("call_id")}', flush=True)
-            print(f'[Call]   has offer: {data.get("offer") is not None}', flush=True)
+            import logging
+            logging.info(f'[Call] === CALL_USER ===')
+            logging.info(f'[Call]   {caller_info["name"]} ({caller_id}) to {target_id} ({call_type})')
+            logging.info(f'[Call]   negotiation_id={negotiation_id}')
+            logging.info(f'[Call]   call_id={data.get("call_id")}')
+            logging.info(f'[Call]   has offer: {data.get("offer") is not None}')
             if data.get('offer'):
-                print(f'[Call]   offer type: {data["offer"].get("type")}', flush=True)
-                print(f'[Call]   offer sdp length: {len(data["offer"].get("sdp", ""))}', flush=True)
-            print(f'[Call]   target_sid: {target_sid[:8]}...', flush=True)
+                logging.info(f'[Call]   offer type: {data["offer"].get("type")}')
+                logging.info(f'[Call]   offer sdp length: {len(data["offer"].get("sdp", ""))}')
+            logging.info(f'[Call]   target_sid: {target_sid[:8]}...')
 
             # Forward to callee
             emit('incoming_call', {
@@ -400,7 +409,8 @@ def register_call_events(socketio, app):
                 'negotiation_id': negotiation_id,
             }, room=target_sid)
 
-            print(f'[Call]   incoming_call emitted to {target_id}', flush=True)
+            import logging
+            logging.info(f'[Call]   incoming_call emitted to {target_id}')
 
     # ─── Call Acceptance ─────────────────────────────────
 
@@ -447,14 +457,15 @@ def register_call_events(socketio, app):
 
             callee_info = _get_user_info(callee_id)
 
-            print(f'[Call] === CALL_ACCEPTED ===', flush=True)
-            print(f'[Call]   {callee_info["name"]} ({callee_id}) accepted call from {caller_id}', flush=True)
-            print(f'[Call]   has answer: {data.get("answer") is not None}', flush=True)
+            import logging
+            logging.info(f'[Call] === CALL_ACCEPTED ===')
+            logging.info(f'[Call]   {callee_info["name"]} ({callee_id}) accepted call from {caller_id}')
+            logging.info(f'[Call]   has answer: {data.get("answer") is not None}')
             if data.get('answer'):
-                print(f'[Call]   answer type: {data["answer"].get("type")}', flush=True)
-                print(f'[Call]   answer sdp length: {len(data["answer"].get("sdp", ""))}', flush=True)
-            print(f'[Call]   session_id: {session_id}', flush=True)
-            print(f'[Call]   caller_sid: {caller_sid[:8] if caller_sid else "NONE"}...', flush=True)
+                logging.info(f'[Call]   answer type: {data["answer"].get("type")}')
+                logging.info(f'[Call]   answer sdp length: {len(data["answer"].get("sdp", ""))}')
+            logging.info(f'[Call]   session_id: {session_id}')
+            logging.info(f'[Call]   caller_sid: {caller_sid[:8] if caller_sid else "NONE"}...')
 
             # Forward answer to caller
             if caller_sid:
@@ -465,9 +476,11 @@ def register_call_events(socketio, app):
                     'call_id': data.get('call_id'),
                     'session_id': session_id,
                 }, room=caller_sid)
-                print(f'[Call]   call_accepted emitted to caller {caller_id}', flush=True)
+                import logging
+                logging.info(f'[Call]   call_accepted emitted to caller {caller_id}')
             else:
-                print(f'[Call]   WARNING: caller_sid is None! Caller {caller_id} not connected!', flush=True)
+                import logging
+                logging.warning(f'[Call]   WARNING: caller_sid is None! Caller {caller_id} not connected!')
 
             # Broadcast call status
             emit('user_call_status', {
@@ -501,7 +514,8 @@ def register_call_events(socketio, app):
 
             callee_info = _get_user_info(callee_id)
 
-            print(f'[Call] {callee_info["name"]} rejected call from {caller_id}', flush=True)
+            import logging
+            logging.info(f'[Call] {callee_info["name"]} rejected call from {caller_id}')
 
             if caller_sid:
                 emit('call_rejected', {
@@ -524,7 +538,8 @@ def register_call_events(socketio, app):
 
         target_sid = get_user_sid(int(target_id))
         if target_sid:
-            print(f'[Call] ICE candidate: {user_id} → {target_id}', flush=True)
+            import logging
+            logging.info(f'[Call] ICE candidate: {user_id} to {target_id}')
             emit('ice_candidate', {
                 'candidate': data.get('candidate'),
                 'from_id': user_id,
@@ -549,12 +564,13 @@ def register_call_events(socketio, app):
                 # End call session if one exists
                 session_id = user_call_session.get(user_id)
 
-                print(f'[Call] === END_CALL ===', flush=True)
-                print(f'[Call]   user_id: {user_id}', flush=True)
-                print(f'[Call]   target_id: {target_id}', flush=True)
-                print(f'[Call]   reason: {reason}', flush=True)
-                print(f'[Call]   session_id: {session_id}', flush=True)
-                print(f'[Call]   active_calls: {active_calls}', flush=True)
+                import logging
+                logging.info(f'[Call] === END_CALL ===')
+                logging.info(f'[Call]   user_id: {user_id}')
+                logging.info(f'[Call]   target_id: {target_id}')
+                logging.info(f'[Call]   reason: {reason}')
+                logging.info(f'[Call]   session_id: {session_id}')
+                logging.info(f'[Call]   active_calls: {active_calls}')
 
                 if session_id:
                     _end_call_session(session_id, reason=reason)
@@ -563,11 +579,12 @@ def register_call_events(socketio, app):
                 if target_id:
                     partner_id = int(target_id)
                 elif user_id in active_calls:
-                    partner_id = active_calls[user_id]
+                    partner_id = active_calls.get(user_id)
 
                 _cleanup_call_tracking(user_id, partner_id)
 
-            print(f'[Call] User {user_id} ended call (reason: {reason})', flush=True)
+            import logging
+            logging.info(f'[Call] User {user_id} ended call (reason: {reason})')
 
             if partner_id:
                 partner_sid = get_user_sid(partner_id)
@@ -662,7 +679,10 @@ def register_call_events(socketio, app):
                 emit('call_session_restore', {'session': None})
                 return
 
-            session = call_sessions[session_id]
+            session = call_sessions.get(session_id)
+            if not session:
+                emit('call_session_restore', {'session': None})
+                return
             partner_id = (
                 session['callee_id'] if session['caller_id'] == user_id
                 else session['caller_id']
@@ -694,7 +714,8 @@ def register_call_events(socketio, app):
         if user_sockets.get(user_id) == sid:
             user_sockets.pop(user_id, None)
 
-        print(f'[Call] User {user_id} disconnected (sid={sid[:8]}...)', flush=True)
+        import logging
+        logging.info(f'[Call] User {user_id} disconnected (sid={sid[:8]}...)')
 
         _handle_user_disconnect(user_id, socketio, app)
 
@@ -755,7 +776,8 @@ def _handle_user_disconnect(user_id, socketio, app):
     # Start grace period timer
     def _grace_expired():
         with app.app_context():
-            print(f'[Call] Grace period expired for user {user_id}', flush=True)
+            import logging
+            logging.info(f'[Call] Grace period expired for user {user_id}')
 
             _end_call_session(session_id, reason='network_timeout')
             _cleanup_call_tracking(user_id, partner_id)
@@ -815,8 +837,8 @@ def _handle_user_reconnect(user_id, socketio, app):
         active_calls[user_id] = partner_id
         active_calls[partner_id] = user_id
 
-    elapsed = int(time.time() - dc['disconnected_at'])
-    print(f'[Call] User {user_id} reconnected after {elapsed}s — restoring call session', flush=True)
+    import logging
+    logging.info(f'[Call] User {user_id} reconnected after {int(time.time() - dc["disconnected_at"])}s - restoring call session')
 
     # Notify reconnecting user to resume
     user_sid = get_user_sid(user_id)

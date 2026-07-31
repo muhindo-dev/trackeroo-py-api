@@ -8,6 +8,7 @@ from backend.models.negotiation_record import NegotiationRecord
 from backend.models.user import AdminUser
 from backend.utils.auth import jwt_required_with_user
 from backend.utils.response import success_response, error_response
+from backend.services.negotiation_state_machine import validate_transition
 
 negotiations_bp = Blueprint('negotiations', __name__)
 
@@ -76,7 +77,8 @@ def _credit_driver_earning(negotiation: Negotiation):
     if fare <= 0:
         return
 
-    wallet = UserWallet.query.filter_by(user_id=negotiation.driver_id).first()
+    # Lock wallet to prevent race conditions during concurrent credits
+    wallet = UserWallet.query.filter_by(user_id=negotiation.driver_id).with_for_update().first()
     if not wallet:
         wallet = UserWallet(user_id=negotiation.driver_id, wallet_balance=0, total_earnings=0)
         db.session.add(wallet)
@@ -221,8 +223,8 @@ def create(user):
         return error_response("Driver not found", status_code=404)
 
     initial_price = int(data.get('initial_price', 0))
-    if initial_price < 50:
-        return error_response("Minimum price is ₦50")
+    if initial_price < 100 or initial_price > 9999900:
+        return error_response("Initial price must be between ₦100 and ₦9,999,900")
 
     negotiation = Negotiation(
         customer_id=user.id,
@@ -322,6 +324,12 @@ def records_post(user):
     except (TypeError, ValueError):
         price_cents = 0
 
+    message_body = data.get('message_body', '')
+    if not message_body or not message_body.strip():
+        return error_response("Message text cannot be empty")
+    if len(message_body) > 1000:
+        return error_response("Message text cannot exceed 1000 characters")
+
     # Handle audio file upload
     audio_url = None
     if 'audio' in request.files:
@@ -392,10 +400,10 @@ def accept(user):
 
         # Driver can start even before payment — payment can be completed during trip
         # Validate: can only start if Accepted
-        if negotiation.status not in ('Accepted', 'Active', 'Started'):
-            return error_response(
-                f"Cannot start trip — current status is '{negotiation.status}'"
-            )
+        is_valid, err_msg = validate_transition(negotiation.status, 'started')
+        if not is_valid:
+            return error_response(err_msg, status_code=409)
+            
         negotiation.status = 'Started'
         negotiation.is_active = 'Yes'
         # ETA availability: driver is busy for the trip duration window.
@@ -417,7 +425,11 @@ def accept(user):
 
         if (negotiation.customer_accepted == 'Accepted'
                 and negotiation.customer_driver == 'Accepted'):
-            negotiation.status = 'Accepted'
+            if negotiation.status != 'Accepted':
+                is_valid, err_msg = validate_transition(negotiation.status, 'accepted')
+                if not is_valid:
+                    return error_response(err_msg, status_code=409)
+                negotiation.status = 'Accepted'
             negotiation.is_active = 'Yes'
 
         # Set agreed_price from the last negotiation record's price (cents)
@@ -436,6 +448,9 @@ def accept(user):
         if (negotiation.customer_accepted == 'Accepted'
                 and negotiation.customer_driver == 'Accepted'
                 and negotiation.status == 'Active'):
+            is_valid, err_msg = validate_transition(negotiation.status, 'accepted')
+            if not is_valid:
+                return error_response(err_msg, status_code=409)
             negotiation.status = 'Accepted'
 
     # V2 instant-ride hook: driver acceptance settles the dispatch.
@@ -479,7 +494,11 @@ def cancel(user):
                 "Offer passed to the next driver" if advanced else "No more drivers available",
                 negotiation.to_dict())
 
-    negotiation.status = 'Cancelled'
+    if negotiation.status != 'Cancelled':
+        is_valid, err_msg = validate_transition(negotiation.status, 'cancelled')
+        if not is_valid:
+            return error_response(err_msg, status_code=409)
+        negotiation.status = 'Cancelled'
     negotiation.is_active = 'No'
     _free_driver(negotiation.driver_id)
     db.session.commit()
@@ -509,7 +528,11 @@ def complete(user):
     if message_type == 'Cancel':
         if negotiation.status == 'Completed':
             return error_response("Cannot cancel an already completed trip")
-        negotiation.status = 'Cancelled'
+        if negotiation.status != 'Cancelled':
+            is_valid, err_msg = validate_transition(negotiation.status, 'cancelled')
+            if not is_valid:
+                return error_response(err_msg, status_code=409)
+            negotiation.status = 'Cancelled'
         negotiation.is_active = 'No'
         _free_driver(negotiation.driver_id)
         msg = "Trip cancelled"
@@ -521,11 +544,11 @@ def complete(user):
         # customer payment to complete. The driver's wallet is credited with the
         # fare as earnings on completion (idempotent), and subscription is the
         # platform's revenue.
-        if negotiation.status not in ('Started', 'Accepted', 'Active'):
-            return error_response(
-                f"Cannot complete — current status is '{negotiation.status}'"
-            )
-        negotiation.status = 'Completed'
+        if negotiation.status != 'Completed':
+            is_valid, err_msg = validate_transition(negotiation.status, 'completed')
+            if not is_valid:
+                return error_response(err_msg, status_code=409)
+            negotiation.status = 'Completed'
         negotiation.is_active = 'No'
         _credit_driver_earning(negotiation)
         _free_driver(negotiation.driver_id)
@@ -673,7 +696,8 @@ def refresh_payment(user):
         })
 
     except Exception as e:
-        return error_response(f"Failed to create payment session: {str(e)}")
+        current_app.logger.error(f"Failed to create payment session: {str(e)}")
+        return error_response("Failed to create payment session")
 
 
 @negotiations_bp.route('/api/negotiations-check-payment', methods=['POST'])
