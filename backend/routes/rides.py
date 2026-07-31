@@ -872,6 +872,10 @@ def active_ride(user):
     if dispatch and dispatch.offer_expires_at:
         payload['offer_seconds_left'] = max(
             0, int((dispatch.offer_expires_at - datetime.utcnow()).total_seconds()))
+        # Identifies THIS offer, not just the ride. A ride can be offered to the
+        # same driver more than once (they let it lapse, then the customer asks
+        # them directly), and the client needs to tell those apart.
+        payload['offer_expires_at'] = dispatch.offer_expires_at.isoformat()
     return success_response("Active ride", payload)
 
 
