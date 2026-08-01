@@ -132,6 +132,35 @@ def driver_ratings(driver_id):
     })
 
 
+@ratings_bp.route('/api/ratings/mine', methods=['GET'])
+@jwt_required_with_user
+def my_ratings(user):
+    """Trips the caller has already rated, so the app knows where to offer a
+    Rate button.
+
+    Without this the client's only way to find out is to POST and be told
+    "You have already rated this trip" — a failed write per row, and no way at
+    all to render a correct trip history up front.
+
+    Ratings are directional: as a customer you rate the driver, as a driver you
+    rate the customer. Match on the side the caller actually spoke from, or a
+    driver would appear to have "already rated" trips their passenger rated.
+    """
+    rows = (DriverRating.query
+            .filter(DriverRating.negotiation_id.isnot(None))
+            .filter(db.or_(
+                db.and_(DriverRating.rated_by == 'customer',
+                        DriverRating.customer_id == user.id),
+                db.and_(DriverRating.rated_by == 'driver',
+                        DriverRating.driver_id == user.id),
+            ))
+            .all())
+    return success_response("Success", {
+        'negotiation_ids': [r.negotiation_id for r in rows],
+        'ratings': [r.to_dict() for r in rows],
+    })
+
+
 @ratings_bp.route('/api/ratings/booking/<int:booking_id>', methods=['GET'])
 @jwt_required_with_user
 def booking_rating_status(user, booking_id):
