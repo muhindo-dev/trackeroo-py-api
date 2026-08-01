@@ -4,8 +4,20 @@
 set -e
 
 echo "==> Locating app directory…"
-APP=$(find /home /root /opt /var/www -maxdepth 6 -name migrate.py 2>/dev/null | head -1 | xargs -r dirname)
-if [ -z "$APP" ]; then echo "ERROR: could not find migrate.py. Set APP=… manually."; exit 1; fi
+# HARDCODED, deliberately. This VPS is shared with U-LITS, which has its own
+# Python app at /var/www/etag-web-py containing its own migrate.py. The old
+# `find … -name migrate.py | head -1` matched BOTH and picked whichever the
+# filesystem happened to return first — one unlucky ordering away from running
+# `git reset --hard` and `migrate.py seed` against the neighbour's live
+# database. Never reintroduce a search step here.
+APP=${APP:-/var/www/truckfully.com/app}
+if [ ! -f "$APP/migrate.py" ]; then
+  echo "ERROR: $APP/migrate.py not found. Set APP=… explicitly."; exit 1
+fi
+case "$APP" in
+  *truckfully*) ;;
+  *) echo "ERROR: refusing to deploy to '$APP' — not a truckfully path."; exit 1 ;;
+esac
 echo "    App: $APP"
 cd "$APP"
 
@@ -48,7 +60,7 @@ fi
 echo "==> Verifying endpoints (give it a few seconds)…"
 sleep 4
 for ep in vehicle-categories subscription-plans; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" "https://truckeroo.mruodel.com/api/$ep")
+  code=$(curl -s -o /dev/null -w "%{http_code}" "https://truckfully.com/api/$ep")
   echo "    /api/$ep -> $code"
 done
 echo "==> Done. Expect 200s above (404 = service not restarted; check the gunicorn service)."
