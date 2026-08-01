@@ -7,22 +7,29 @@ import {
   FiTag, FiAward
 } from 'react-icons/fi';
 
+// Only what the product actually does today: riders order a ride now or for
+// later, driver and rider negotiate the fare, the fare is settled in cash, and
+// the platform earns from driver subscriptions.
+//
+// Hidden rather than deleted — the routes and pages still exist, so restoring
+// any of these is one line here:
+//   Wallets, Payouts  — held balances and disbursements. Fares settle offline,
+//                       so no money moves through the app to hold or pay out.
+//   Payments          — was per-trip charges; subscription payments are shown
+//                       on the Subscriptions page instead.
+//   Companies         — corporate accounts, not part of this product.
+//   Trips, Bookings   — the scheduled-trip marketplace (drivers publish trips
+//                       with seats). Removed from the apps, so nothing feeds it.
 const NAV = [
   { to: '/',              icon: FiHome,          label: 'Dashboard',     end: true },
   { to: '/users',         icon: FiUsers,         label: 'Users & Drivers' },
-  { to: '/trips',         icon: FiNavigation,    label: 'Trips' },
-  { to: '/negotiations',  icon: FiMessageSquare, label: 'Negotiations' },
-  { to: '/bookings',      icon: FiCalendar,      label: 'Bookings' },
-  { to: '/payments',      icon: FiCreditCard,    label: 'Payments' },
-  { to: '/wallets',       icon: FiDollarSign,    label: 'Wallets' },
-  { to: '/payouts',       icon: FiSend,          label: 'Payouts' },
+  { to: '/negotiations',  icon: FiNavigation,    label: 'Rides' },
+  { to: '/subscriptions', icon: FiAward,         label: 'Subscriptions' },
   { to: '/chats',         icon: FiMessageCircle, label: 'Chats' },
-  { to: '/companies',     icon: FiBriefcase,     label: 'Companies' },
-  { to: '/route-stages',  icon: FiMapPin,        label: 'Route Stages' },
+  { to: '/vehicles',      icon: FiTruck,         label: 'Vehicles' },
   { to: '/vehicle-categories', icon: FiTruck,    label: 'Vehicle Categories' },
-  { to: '/pricing',        icon: FiTag,          label: 'Pricing Parameters' },
-  { to: '/vehicles',       icon: FiTruck,        label: 'Vehicles' },
-  { to: '/subscriptions',  icon: FiAward,        label: 'Subscriptions' },
+  { to: '/pricing',       icon: FiTag,           label: 'Pricing' },
+  { to: '/route-stages',  icon: FiMapPin,        label: 'Route Stages' },
 ];
 
 export default function Sidebar({ open, onClose }) {

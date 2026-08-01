@@ -1366,9 +1366,39 @@ def update_service_rate(user, rate_id):
         rate.service_type = data['service_type']
     if data.get('vehicle_type'):
         rate.vehicle_type = data['vehicle_type']
-    for field in ('base_rate_cad', 'per_km_rate_cad', 'per_minute_rate_cad', 'surge_multiplier', 'minimum_fare_cad'):
-        if data.get(field) is not None:
-            setattr(rate, field, float(data[field]))
+    # Money and coefficients. The formula parameters (p/q/r/s/t, free_km) were
+    # missing from this list, so the admin panel could POST them, get
+    # "Updated" back, and have every one of them silently dropped — prices
+    # looked edited but never changed.
+    money_fields = (
+        'base_rate_cad', 'per_km_rate_cad', 'per_minute_rate_cad',
+        'surge_multiplier', 'minimum_fare_cad',
+        'p_extra_km', 'q_peak_minute', 'r_offpeak_minute',
+        's_loading_overrun', 't_completion_overrun', 'free_km',
+    )
+    for field in money_fields:
+        if data.get(field) is not None and str(data[field]).strip() != '':
+            try:
+                value = float(data[field])
+            except (TypeError, ValueError):
+                return error_response(f"{field} must be a number")
+            if value < 0:
+                return error_response(f"{field} cannot be negative")
+            setattr(rate, field, value)
+
+    # Peak windows are hours of the day. Anything outside 0-23 would silently
+    # disable the window rather than erroring, so reject it here.
+    for field in ('peak_start_hour', 'peak_end_hour',
+                  'peak_start_hour_pm', 'peak_end_hour_pm'):
+        if data.get(field) is not None and str(data[field]).strip() != '':
+            try:
+                hour = int(float(data[field]))
+            except (TypeError, ValueError):
+                return error_response(f"{field} must be a whole hour")
+            if hour < 0 or hour > 23:
+                return error_response(f"{field} must be between 0 and 23")
+            setattr(rate, field, hour)
+
     if data.get('is_active') is not None:
         rate.is_active = int(data['is_active'])
     if data.get('notes') is not None:
