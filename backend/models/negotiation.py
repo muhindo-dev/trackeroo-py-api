@@ -3,6 +3,20 @@ from backend.models import db
 from backend.utils.helpers import my_date_time
 
 
+def _fare_major(*candidates):
+    """First non-zero amount, converted to major units for display.
+
+    Every money column on this model — agreed_price, last_offer_price,
+    initial_price — is stored in CENTS/kobo. Clients kept dividing by 100
+    themselves and drifting out of step, so the API hands them one
+    display-ready number instead.
+    """
+    for cents in candidates:
+        if cents:
+            return round(float(cents) / 100.0, 2)
+    return 0.0
+
+
 class Negotiation(db.Model):
     __tablename__ = 'negotiations'
 
@@ -142,6 +156,10 @@ class Negotiation(db.Model):
             'details': self.details,
             'initial_price': self.initial_price,
             'agreed_price': float(self.agreed_price) if self.agreed_price else None,
+            # Display-ready fare in major units. Prefer this over the raw
+            # cents columns above when showing a price to a user.
+            'fare': _fare_major(self.agreed_price, last_offer_price,
+                                self.initial_price),
             'last_offer_price': last_offer_price,
             'last_negotiator_id': last_negotiator_id,
             'second_last_offer_price': second_last_offer_price,

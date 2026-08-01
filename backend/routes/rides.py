@@ -204,7 +204,7 @@ def _offer_to(dispatch, negotiation, driver_id):
     dispatch.offer_expires_at = datetime.utcnow() + timedelta(seconds=OFFER_SECONDS)
     try:
         notify_user(driver_id, "New ride request 🚕",
-                    f"Pickup: {negotiation.pickup_address or 'nearby'} — ₦{int(_num(negotiation.agreed_price) or 0)}",
+                    f"From {negotiation.pickup_address or 'nearby'} to {negotiation.dropoff_address or 'nearby'} — ₦{int((_num(negotiation.initial_price) or 0) / 100)}",
                     {'type': 'ride_offer', 'negotiation_id': negotiation.id})
     except Exception:
         pass
@@ -306,14 +306,24 @@ def request_ride(user):
     """Create an instant ride and auto-offer it to the fairest nearby driver."""
     data = request.get_json(silent=True) or request.form or {}
     
-    # Check if user already has an active ride
-    active_ride = Negotiation.query.filter_by(
-        customer_id=user.id,
-        is_active='Yes'
-    ).first()
+    # Check if user already has an active ride. These criteria must stay in
+    # step with /api/rides/active — that endpoint is how the app finds the
+    # blocking ride, so if this filter is wider the customer gets refused by a
+    # ride their app cannot show them and has no way to reach or cancel.
+    # Returning the id lets the app open that ride instead of dead-ending.
+    active_ride = (Negotiation.query
+                   .filter(Negotiation.customer_id == user.id,
+                           Negotiation.is_active == 'Yes',
+                           Negotiation.status.in_(['Active', 'Accepted', 'Started']))
+                   .order_by(Negotiation.id.desc())
+                   .first())
     if active_ride:
-        return error_response("You already have an active ride in progress.")
-        
+        return error_response(
+            "You already have an active ride in progress.",
+            data={'active_negotiation_id': active_ride.id,
+                  'active_status': active_ride.status})
+
+
     category = _resolve_category(data)
     if not category:
         return error_response("Valid category_id or category_code is required")

@@ -250,6 +250,10 @@ def create(user):
     db.session.add(negotiation)
     db.session.flush()
 
+    # The customer proposes a price. The first message should just be the amount
+    # so that the frontend's isPrice regex matches and displays it properly.
+    price_str = str(int(initial_price / 100))
+
     record = NegotiationRecord(
         negotiation_id=negotiation.id,
         customer_id=user.id,
@@ -259,7 +263,7 @@ def create(user):
         price=initial_price,
         price_accepted='No',
         message_type='Negotiation',
-        message_body=data.get('message_body'),
+        message_body=price_str,
     )
     db.session.add(record)
     db.session.commit()
@@ -444,7 +448,10 @@ def accept(user):
                 .first()
             )
             if last_record and last_record.price:
-                negotiation.agreed_price = last_record.price  # cents
+                # CENTS — every other writer and reader of this column uses
+                # cents. Clients must read `fare` from to_dict() for a
+                # display-ready amount rather than converting this themselves.
+                negotiation.agreed_price = last_record.price
 
     else:
         # Fallback: if both accepted, auto-set Accepted
