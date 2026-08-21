@@ -9,7 +9,8 @@
   GET  /api/drivers/<id>/card         — public driver card (direct connect by ID/QR)
 
 Fairness ranking (per owner spec):
-  ring 1 = drivers within 5 km; if empty, ring 2 = within 10 km.
+  ring 1 = within 5 km; if empty, ring 2 = 10 km; if empty, ring 3 = 20 km;
+  if still empty, drivers live for another service group within 20 km.
   Order: fewest completed trips today  →  nearest  →  highest rating.
   Busy drivers (active trip / busy_until in future) are skipped.
 """
@@ -37,11 +38,23 @@ rides_bp = Blueprint('rides', __name__)
 OFFER_SECONDS = 35          # how long each driver holds the offer
 RING1_KM = 5.0
 RING2_KM = 10.0
-PROPOSAL_KM = 15.0          # radius for "no match" manual proposals
+RING3_KM = 20.0             # last widening before giving up on auto-dispatch
+PROPOSAL_KM = 25.0          # radius for "no match" manual proposals; must
+                            # be >= RING3_KM or the fallback list is emptier
+                            # than the automatic search that just failed
 CITY_SPEED_KMH = 25.0       # ETA model
 # A driver whose app hasn't reported a position in this long is treated as
-# gone, whatever their online flag says.
-LOCATION_STALE_MINUTES = 15
+# gone, whatever their online flag says. A backgrounded app reports less often
+# than a foregrounded one, and 15 minutes was dropping drivers who were sitting
+# in the car waiting — which reached the customer as "no drivers nearby" while
+# one was parked 300 m away.
+LOCATION_STALE_MINUTES = 45
+
+# Last resort: offer to a driver live for a DIFFERENT service group when nobody
+# in the right group is reachable. They can still decline, and a declined offer
+# costs far less than telling a customer nobody is available. Set False to
+# require an exact group match.
+ALLOW_CROSS_GROUP_FALLBACK = True
 
 # Sanity limits. A bad/stale GPS fix (e.g. an emulator sitting in California
 # while the destination is in Lagos) used to produce a 16,000 km trip whose
@@ -121,7 +134,7 @@ def _eta_min(km):
     return max(1, round(km / CITY_SPEED_KMH * 60))
 
 
-def _online_drivers(service_group):
+def _online_drivers(service_group, ignore_group=False):
     """Online, subscribed, not-busy drivers live for this service group.
 
     'ready_for_trip' alone is not proof of reachability — a driver who
@@ -139,8 +152,14 @@ def _online_drivers(service_group):
         AdminUser.location_updated_at.isnot(None),
         AdminUser.location_updated_at >= fresh_since,
     )
-    if service_group:
-        q = q.filter(AdminUser.live_service_group == service_group)
+    if service_group and not ignore_group:
+        # A driver who never chose a group used to be invisible to every
+        # request. Treat "unset" as "available for anything" instead.
+        q = q.filter(db.or_(
+            AdminUser.live_service_group == service_group,
+            AdminUser.live_service_group.is_(None),
+            AdminUser.live_service_group == '',
+        ))
     drivers = []
     for d in q.limit(300).all():
         if d.busy_until and d.busy_until > now:
@@ -162,11 +181,23 @@ def _trips_today(driver_id):
 
 def _ranked_candidates(service_group, pickup_lat, pickup_lng):
     """Fairness-ranked candidate driver list. Returns [(driver, km)] ranked."""
-    pool = []
-    for d in _online_drivers(service_group):
-        km = _haversine_km(pickup_lat, pickup_lng, float(d.current_latitude), float(d.current_longitude))
-        pool.append((d, km))
-    ring = [x for x in pool if x[1] <= RING1_KM] or [x for x in pool if x[1] <= RING2_KM]
+    def _pool(ignore_group):
+        out = []
+        for d in _online_drivers(service_group, ignore_group=ignore_group):
+            km = _haversine_km(pickup_lat, pickup_lng,
+                               float(d.current_latitude), float(d.current_longitude))
+            out.append((d, km))
+        return out
+
+    # Widen instead of giving up. Each step only runs when the one before it
+    # found nobody, so a near driver in the right group is still preferred.
+    pool = _pool(False)
+    ring = ([x for x in pool if x[1] <= RING1_KM]
+            or [x for x in pool if x[1] <= RING2_KM]
+            or [x for x in pool if x[1] <= RING3_KM])
+
+    if not ring and ALLOW_CROSS_GROUP_FALLBACK:
+        ring = [x for x in _pool(True) if x[1] <= RING3_KM]
     # fewest trips today → nearest → highest rating
     ring.sort(key=lambda x: (_trips_today(x[0].id), round(x[1], 1), -float(x[0].rating or 0)))
     return ring
