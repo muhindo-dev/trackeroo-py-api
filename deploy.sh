@@ -50,12 +50,23 @@ $PY migrate.py migrate
 $PY migrate.py seed
 
 echo "==> Restarting the app service…"
-SVC=$(systemctl list-units --type=service --all 2>/dev/null | grep -ioE '[a-z0-9_-]*(truck|track|negoride|gunicorn)[a-z0-9_-]*\.service' | head -1)
-if [ -n "$SVC" ]; then
-  echo "    systemctl restart $SVC"; systemctl restart "$SVC"
-else
-  echo "    No systemd unit found; trying gunicorn HUP"; pkill -HUP -f gunicorn 2>/dev/null || true
+# HARDCODED, like APP above and for the same reason. The old lookup grepped
+# systemd for anything matching truck|track|negoride|gunicorn and took head -1.
+# This VPS has BOTH truckfully.service (this app, /var/www/truckfully.com/app)
+# and negoride.service (a different live app at negoride.ugnews24.info), so the
+# match order decided which one got restarted — on at least one deploy it
+# bounced negoride and left truckfully running stale code. Never grep for the
+# service here.
+SVC=${SVC:-truckfully.service}
+if ! systemctl list-unit-files "$SVC" >/dev/null 2>&1; then
+  echo "ERROR: $SVC not found. Set SVC=... explicitly."; exit 1
 fi
+SVC_DIR=$(systemctl show "$SVC" -p WorkingDirectory --value 2>/dev/null)
+if [ -n "$SVC_DIR" ] && [ "$SVC_DIR" != "$APP" ]; then
+  echo "ERROR: $SVC runs from '$SVC_DIR' but we deployed to '$APP'. Refusing."; exit 1
+fi
+echo "    systemctl restart $SVC"
+systemctl restart "$SVC"
 
 echo "==> Verifying endpoints (give it a few seconds)…"
 sleep 4
