@@ -20,7 +20,7 @@ from backend.models.route_stage import RouteStage
 from backend.models.popular_location import PopularLocation
 from backend.models.service_rate import ServiceRate
 from backend.models.driver_rating import DriverRating
-from backend.utils.auth import admin_required, jwt_required_with_user
+from backend.utils.auth import admin_required, jwt_required_with_user, admin_required_strict
 from backend.utils.response import success_response, error_response
 
 admin_bp = Blueprint('admin', __name__)
@@ -277,7 +277,7 @@ def users_update(user, user_id):
         'first_name', 'last_name', 'name', 'email', 'phone_number',
         'user_type', 'date_of_birth', 'sex', 'current_address',
         'country_name', 'country_code', 'country_short_name', 'automobile',
-        'max_passengers', 'ready_for_trip',
+        'max_passengers', 'ready_for_trip', 'live_service_group',
         'driving_license_number', 'nin',
         'driving_license_issue_date', 'driving_license_validity',
         'driving_license_issue_authority',
@@ -296,6 +296,77 @@ def users_update(user, user_id):
     target.updated_at = datetime.utcnow()
     db.session.commit()
     return success_response("User updated", target.to_dict())
+
+
+@admin_bp.route('/api/admin/users/<int:user_id>/set-location', methods=['POST'])
+@admin_required_strict
+def users_set_location(user, user_id):
+    """God-mode: set/override a user's GPS position (and freshen it so the
+    dispatch engine treats them as live)."""
+    target = AdminUser.query.get(user_id)
+    if not target:
+        return error_response("User not found", status_code=404)
+    data = request.get_json(silent=True) or request.form
+    try:
+        lat = float(data.get('latitude'))
+        lng = float(data.get('longitude'))
+    except (TypeError, ValueError):
+        return error_response("Valid latitude and longitude are required")
+    if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+        return error_response("Coordinates out of range")
+    target.current_latitude = lat
+    target.current_longitude = lng
+    if hasattr(target, 'location_updated_at'):
+        target.location_updated_at = datetime.utcnow()
+    if hasattr(target, 'last_location_update'):
+        target.last_location_update = datetime.utcnow()
+    target.updated_at = datetime.utcnow()
+    db.session.commit()
+    return success_response("Location updated", target.to_dict())
+
+
+@admin_bp.route('/api/admin/users/<int:user_id>/set-online', methods=['POST'])
+@admin_required_strict
+def users_set_online(user, user_id):
+    """God-mode: force a driver online/offline. When bringing them online we
+    also freshen the location timestamp so the dispatch engine can see them."""
+    target = AdminUser.query.get(user_id)
+    if not target:
+        return error_response("User not found", status_code=404)
+    data = request.get_json(silent=True) or request.form
+    online = str(data.get('online', 'true')).lower() in ('1', 'true', 'yes', 'on')
+    target.ready_for_trip = 'Yes' if online else 'No'
+    sg = data.get('service_group')
+    if sg and hasattr(target, 'live_service_group'):
+        target.live_service_group = sg
+    if hasattr(target, 'online_status'):
+        target.online_status = 'Online' if online else 'Offline'
+    if online:
+        now = datetime.utcnow()
+        if hasattr(target, 'location_updated_at'):
+            target.location_updated_at = now
+        if hasattr(target, 'last_location_update'):
+            target.last_location_update = now
+    target.updated_at = datetime.utcnow()
+    db.session.commit()
+    return success_response(
+        "Driver is now " + ("online" if online else "offline"),
+        target.to_dict())
+
+
+@admin_bp.route('/api/admin/users/<int:user_id>/impersonate', methods=['POST'])
+@admin_required_strict
+def users_impersonate(user, user_id):
+    """God-mode: mint a session token to act as any user."""
+    target = AdminUser.query.get(user_id)
+    if not target:
+        return error_response("User not found", status_code=404)
+    from flask_jwt_extended import create_access_token
+    token = create_access_token(identity=str(target.id))
+    return success_response("Impersonation token issued", {
+        'token': token,
+        'user': target.to_dict(),
+    })
 
 
 @admin_bp.route('/api/admin/users/<int:user_id>/reset-password', methods=['POST'])

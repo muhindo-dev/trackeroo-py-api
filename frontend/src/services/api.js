@@ -49,6 +49,10 @@ export const adminAPI = {
   userDelete:   (id) => api.post(`/admin/users/${id}/delete`),
   userWallet:   (id) => api.get(`/admin/users/${id}/wallet`),
   userWalletAdj:(id, data) => api.post(`/admin/users/${id}/wallet/adjust`, data),
+  // God-mode controls
+  userSetLocation: (id, data) => api.post(`/admin/users/${id}/set-location`, data),
+  userSetOnline:   (id, data) => api.post(`/admin/users/${id}/set-online`, data),
+  userImpersonate: (id) => api.post(`/admin/users/${id}/impersonate`),
 
   negotiations: (params) => api.get('/admin/negotiations', { params }),
   negotiationShow:  (id) => api.get(`/admin/negotiations/${id}`),

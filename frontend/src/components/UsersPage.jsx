@@ -5,7 +5,7 @@ import {
   FiChevronRight, FiEdit2, FiTrash2, FiUser, FiAlertTriangle,
   FiRefreshCw, FiFilter, FiKey, FiDollarSign, FiEye, FiEyeOff,
   FiChevronDown, FiSave, FiXCircle, FiFileText, FiCamera,
-  FiCheckCircle, FiMail,
+  FiCheckCircle, FiMail, FiMapPin,
 } from 'react-icons/fi';
 
 /* ─── helpers ─────────────────────────────────────────────────────────── */
@@ -535,6 +535,13 @@ function EditDrawer({ user, onClose, onSave }) {
   const [msg, setMsg] = useState(null);
   const [resettingPwd, setResettingPwd] = useState(false);
   const [adjustingWallet, setAdjustingWallet] = useState(false);
+  // God-mode super controls
+  const [geo, setGeo] = useState({ latitude: '', longitude: '' });
+  const [savingGeo, setSavingGeo] = useState(false);
+  const [onlineGroup, setOnlineGroup] = useState('Boda');
+  const [settingOnline, setSettingOnline] = useState(false);
+  const [imToken, setImToken] = useState('');
+  const [impersonating, setImpersonating] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -545,6 +552,11 @@ function EditDrawer({ user, onClose, onSave }) {
     // status is 1/0 in DB but 'active'/'inactive' in to_dict
     f.status = user.status === 'active' ? '1' : '0';
     setForm(f);
+    setGeo({
+      latitude: user.current_latitude != null ? String(user.current_latitude) : '',
+      longitude: user.current_longitude != null ? String(user.current_longitude) : '',
+    });
+    if (user.live_service_group) setOnlineGroup(String(user.live_service_group));
     adminAPI.userWallet(user.id).then(({ data }) => {
       if (data.code === 1) setWalletData(data.data);
     }).catch(() => {});
@@ -607,7 +619,129 @@ function EditDrawer({ user, onClose, onSave }) {
     }
   };
 
-  const tabs = ['Info', 'Driver', 'Services', 'Security', 'Wallet'];
+  const handleSetLocation = async () => {
+    const lat = parseFloat(geo.latitude), lng = parseFloat(geo.longitude);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      setMsg({ type: 'error', text: 'Enter valid latitude and longitude' });
+      return;
+    }
+    setSavingGeo(true);
+    setMsg(null);
+    try {
+      const { data } = await adminAPI.userSetLocation(user.id, { latitude: lat, longitude: lng });
+      setMsg({ type: data.code === 1 ? 'success' : 'error', text: data.message || (data.code === 1 ? 'Location updated' : 'Failed') });
+      if (data.code === 1 && data.data) onSave(data.data);
+    } catch {
+      setMsg({ type: 'error', text: 'Network error' });
+    } finally {
+      setSavingGeo(false);
+    }
+  };
+
+  const handleSetOnline = async (online) => {
+    setSettingOnline(true);
+    setMsg(null);
+    try {
+      const payload = online
+        ? { online: true, service_group: onlineGroup }
+        : { online: false };
+      const { data } = await adminAPI.userSetOnline(user.id, payload);
+      setMsg({ type: data.code === 1 ? 'success' : 'error', text: data.message || (data.code === 1 ? (online ? 'Forced online' : 'Forced offline') : 'Failed') });
+      if (data.code === 1 && data.data) onSave(data.data);
+    } catch {
+      setMsg({ type: 'error', text: 'Network error' });
+    } finally {
+      setSettingOnline(false);
+    }
+  };
+
+  const handleImpersonate = async () => {
+    setImpersonating(true);
+    setMsg(null);
+    setImToken('');
+    try {
+      const { data } = await adminAPI.userImpersonate(user.id);
+      if (data.code === 1 && (data.data?.token || data.token)) {
+        setImToken(data.data?.token || data.token);
+        setMsg({ type: 'success', text: 'Impersonation token issued — copy it below' });
+      } else {
+        setMsg({ type: 'error', text: data.message || 'Failed to issue token' });
+      }
+    } catch {
+      setMsg({ type: 'error', text: 'Network error' });
+    } finally {
+      setImpersonating(false);
+    }
+  };
+
+  const renderControl = () => (
+    <div>
+      {/* GPS override */}
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#999', marginBottom: 12 }}>GPS Location Override</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>Latitude</label>
+          <input type="number" step="any" value={geo.latitude}
+            onChange={(e) => setGeo((g) => ({ ...g, latitude: e.target.value }))}
+            placeholder="e.g. 6.5250"
+            style={{ width: '100%', padding: '9px 10px', fontSize: 13, border: '1.5px solid #ccc', outline: 'none', fontFamily: 'inherit' }} />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>Longitude</label>
+          <input type="number" step="any" value={geo.longitude}
+            onChange={(e) => setGeo((g) => ({ ...g, longitude: e.target.value }))}
+            placeholder="e.g. 3.3800"
+            style={{ width: '100%', padding: '9px 10px', fontSize: 13, border: '1.5px solid #ccc', outline: 'none', fontFamily: 'inherit' }} />
+        </div>
+        <button className="btn btn-sm btn-primary" onClick={handleSetLocation} disabled={savingGeo} style={{ height: 38, flexShrink: 0 }}>
+          <FiMapPin size={14} />
+          {savingGeo ? '…' : 'Set GPS'}
+        </button>
+      </div>
+      <p style={{ fontSize: 12, color: '#999', marginTop: 0, marginBottom: 24 }}>Moves the user on the live map instantly. Tip: Lagos is 6.5250, 3.3800.</p>
+
+      {/* Presence */}
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#999', marginBottom: 12 }}>Presence & Availability</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>Service Group (when online)</label>
+          <select value={onlineGroup} onChange={(e) => setOnlineGroup(e.target.value)}
+            style={{ width: '100%', padding: '9px 10px', fontSize: 13, border: '1.5px solid #ccc', outline: 'none', fontFamily: 'inherit', background: '#fff' }}>
+            {['Boda', 'Special Hire', 'Truck'].map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </div>
+        <button className="btn btn-sm btn-primary" onClick={() => handleSetOnline(true)} disabled={settingOnline} style={{ height: 38, flexShrink: 0, background: '#388e3c', borderColor: '#388e3c' }}>
+          {settingOnline ? '…' : 'Force Online'}
+        </button>
+        <button className="btn btn-sm btn-secondary" onClick={() => handleSetOnline(false)} disabled={settingOnline} style={{ height: 38, flexShrink: 0 }}>
+          Force Offline
+        </button>
+      </div>
+      <p style={{ fontSize: 12, color: '#999', marginTop: 0, marginBottom: 24 }}>Sets the driver ready/not-ready for trips and freshens their location timestamp.</p>
+
+      {/* Impersonation */}
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#999', marginBottom: 12 }}>Impersonate (Login As)</div>
+      <button className="btn btn-sm btn-primary" onClick={handleImpersonate} disabled={impersonating} style={{ height: 38 }}>
+        <FiKey size={14} />
+        {impersonating ? 'Issuing…' : 'Issue Login Token'}
+      </button>
+      {imToken && (
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>Access Token (Bearer)</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="text" readOnly value={imToken}
+              style={{ flex: 1, padding: '9px 10px', fontSize: 12, border: '1.5px solid #ccc', outline: 'none', fontFamily: 'monospace', background: '#f7f7f7' }} />
+            <button className="btn btn-sm btn-secondary" onClick={() => { navigator.clipboard?.writeText(imToken); setMsg({ type: 'success', text: 'Token copied' }); }} style={{ height: 38, flexShrink: 0 }}>
+              Copy
+            </button>
+          </div>
+        </div>
+      )}
+      <p style={{ fontSize: 12, color: '#999', marginTop: 8 }}>Use this token as a Bearer token to act as this user for support/debugging. Handle with care.</p>
+    </div>
+  );
+
+  const tabs = ['Info', 'Driver', 'Services', 'Security', 'Wallet', 'Control'];
 
   const renderInfo = () => (
     <>
@@ -777,7 +911,7 @@ function EditDrawer({ user, onClose, onSave }) {
     </div>
   );
 
-  const tabContent = [renderInfo, renderDriver, renderServices, renderSecurity, renderWallet];
+  const tabContent = [renderInfo, renderDriver, renderServices, renderSecurity, renderWallet, renderControl];
 
   if (!user) return null;
 

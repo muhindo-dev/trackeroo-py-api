@@ -56,3 +56,27 @@ def admin_required(fn):
             return jsonify({'code': 0, 'message': 'Admin access required'}), 403
         return fn(user, *args, **kwargs)
     return wrapper
+
+
+def admin_required_strict(fn):
+    """Like admin_required but WITHOUT the legacy user_id body fallback.
+
+    The fallback in get_current_user() lets any request authenticate by
+    passing user_id=<some admin id>, which is fine for ordinary endpoints on
+    this live app but must never gate sensitive god-mode controls (set GPS,
+    force online, impersonate). Here we require a genuinely verified JWT.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            verify_jwt_in_request()
+            user_id = get_jwt_identity()
+            user = db.session.get(AdminUser, int(user_id))
+        except Exception:
+            user = None
+        if not user:
+            return jsonify({'code': 0, 'message': 'Unauthorized'}), 401
+        if user.user_type not in ('Admin', 'Super Admin'):
+            return jsonify({'code': 0, 'message': 'Admin access required'}), 403
+        return fn(user, *args, **kwargs)
+    return wrapper
