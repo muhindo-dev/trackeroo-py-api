@@ -187,6 +187,38 @@ export default function LocationPickerModal({
     return () => { clearTimeout(t); clearTimeout(killer); ctl.abort(); };
   }, [query, open, countryCodes]);
 
+  /* Esc closes the picker (capture, so it lands here before the drawer's handler). */
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onCancel?.(); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, onCancel]);
+
+  /* Freeze the page behind the modal so scrolling can't drift it around. */
+  useEffect(() => {
+    if (!open) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  /* A resized window (or modal) leaves Leaflet with stale dimensions — grey
+   * tiles and a pin that no longer lines up. Re-measure on any size change. */
+  useEffect(() => {
+    if (!open) return undefined;
+    const refresh = () => mapRef.current?.invalidateSize();
+    window.addEventListener('resize', refresh);
+    let ro;
+    if (mapElRef.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(refresh);
+      ro.observe(mapElRef.current);
+    }
+    return () => { window.removeEventListener('resize', refresh); if (ro) ro.disconnect(); };
+  }, [open]);
+
   const useMyLocation = () => {
     if (!navigator.geolocation) { setErr('This browser has no geolocation'); return; }
     setErr('');
@@ -216,8 +248,8 @@ export default function LocationPickerModal({
 
   return (
     // Deliberately no backdrop-click-to-close: this must not vanish mid-edit.
-    <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ width: 1000, maxWidth: '96vw', height: '86vh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 48px rgba(0,0,0,0.3)' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
+      <div style={{ width: 1560, maxWidth: '98vw', height: '94vh', minHeight: 520, background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 48px rgba(0,0,0,0.35)' }}>
 
         {/* header */}
         <div style={{ padding: '14px 18px', borderBottom: '2px solid #040404', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -253,7 +285,7 @@ export default function LocationPickerModal({
           </div>
 
           {(searching || noHits || results.length > 0) && query.trim().length >= 3 && (
-            <div style={{ position: 'absolute', left: 18, right: 18, top: '100%', background: '#fff', border: '1.5px solid #ccc', borderTop: 'none', maxHeight: 260, overflowY: 'auto', zIndex: 1210, boxShadow: '0 6px 18px rgba(0,0,0,0.12)' }}>
+            <div style={{ position: 'absolute', left: 18, right: 18, top: '100%', background: '#fff', border: '1.5px solid #ccc', borderTop: 'none', maxHeight: 340, overflowY: 'auto', zIndex: 1210, boxShadow: '0 6px 18px rgba(0,0,0,0.12)' }}>
               {searching && (
                 <div style={{ padding: '10px 12px', fontSize: 12.5, color: '#777', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FiLoader size={13} style={{ animation: 'spin .6s linear infinite', color: '#EF9B11' }} />
