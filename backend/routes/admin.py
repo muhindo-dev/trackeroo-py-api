@@ -658,6 +658,92 @@ def negotiations_update_status(user, neg_id):
     return success_response("Negotiation status updated", neg.to_dict())
 
 
+@admin_bp.route('/api/admin/negotiations/<int:neg_id>/update', methods=['POST'])
+@admin_required_strict
+def negotiations_update(user, neg_id):
+    """God-mode: edit any field on a negotiation.
+
+    Money is stored in CENTS but admins type major units, so the price fields
+    are converted here — sending 830 sets 83000, which is what every client
+    reads back as ₦830. Only keys actually present in the body are touched, so
+    a partial save can't blank the rest of the record.
+    """
+    neg = Negotiation.query.get(neg_id)
+    if not neg:
+        return error_response("Negotiation not found", status_code=404)
+
+    data = request.get_json(silent=True) or request.form or {}
+    before_driver = neg.driver_id
+
+    text_fields = [
+        'status', 'customer_accepted', 'customer_driver', 'is_active',
+        'payment_method', 'payment_status', 'ride_source',
+        'pickup_address', 'pickup_lat', 'pickup_lng',
+        'dropoff_address', 'dropoff_lat', 'dropoff_lng',
+        'cancelled_by', 'cancel_reason', 'details', 'schedule_note',
+        'customer_name', 'driver_name',
+    ]
+    for f in text_fields:
+        if f in data:
+            v = data.get(f)
+            setattr(neg, f, None if v in ('', None) else v)
+
+    for f in ('customer_id', 'driver_id'):
+        if f in data:
+            v = data.get(f)
+            try:
+                setattr(neg, f, int(v) if v not in ('', None) else None)
+            except (TypeError, ValueError):
+                return error_response(f"{f} must be a whole number")
+
+    # Major units in, cents out.
+    for f in ('agreed_price', 'initial_price'):
+        if f in data:
+            v = data.get(f)
+            if v in ('', None):
+                setattr(neg, f, None)
+                continue
+            try:
+                setattr(neg, f, int(round(float(v) * 100)))
+            except (TypeError, ValueError):
+                return error_response(f"{f} must be a number")
+
+    if 'scheduled_at' in data:
+        v = (data.get('scheduled_at') or '').strip()
+        if not v:
+            neg.scheduled_at = None
+        else:
+            parsed = None
+            for fmt in ('%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'):
+                try:
+                    parsed = datetime.strptime(v, fmt)
+                    break
+                except ValueError:
+                    continue
+            if parsed is None:
+                return error_response("scheduled_at must look like 2026-01-31T14:30")
+            neg.scheduled_at = parsed
+
+    # Keep the derived flag honest rather than trusting whatever was typed.
+    if neg.status in ('Completed', 'Cancelled'):
+        neg.is_active = 'No'
+        # Ending a ride here must release the driver exactly as the ride routes
+        # do. Without this an admin who closes a stuck trip leaves busy_until
+        # set, and the driver silently drops out of dispatch — no offers, no
+        # ringing — until it lapses.
+        from backend.routes.negotiations import _free_driver
+        _free_driver(neg.driver_id)
+
+    # Also release the previous driver when the assignment is moved away.
+    if 'driver_id' in data and before_driver and before_driver != neg.driver_id:
+        from backend.routes.negotiations import _free_driver
+        _free_driver(before_driver)
+
+    neg.updated_at = datetime.utcnow()
+    db.session.commit()
+    return success_response("Negotiation updated", neg.to_dict())
+
+
 @admin_bp.route('/api/admin/negotiations/<int:neg_id>/cancel', methods=['POST'])
 @admin_required
 def negotiations_cancel(user, neg_id):

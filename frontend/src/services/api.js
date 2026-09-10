@@ -58,6 +58,7 @@ export const adminAPI = {
   negotiationShow:  (id) => api.get(`/admin/negotiations/${id}`),
   negotiationStatus:(id, data) => api.post(`/admin/negotiations/${id}/update-status`, data),
   negotiationCancel:(id) => api.post(`/admin/negotiations/${id}/cancel`),
+  negotiationUpdate:(id, data) => api.post(`/admin/negotiations/${id}/update`, data),
 
   trips:        (params) => api.get('/admin/trips', { params }),
   tripShow:     (id) => api.get(`/admin/trips/${id}`),
@@ -114,3 +115,37 @@ export const adminAPI = {
 };
 
 export default api;
+
+/* ── Ride simulator ──────────────────────────────────────────────────────
+ * Drives the SAME endpoints the mobile app calls, authenticated as a real
+ * user via an impersonation token. That is the point: a simulator hitting
+ * bespoke admin routes would prove nothing about what riders experience.
+ *
+ * Deliberately a separate axios instance — the admin one redirects to /login
+ * on any 401, which would throw the whole console out if an impersonated call
+ * were ever rejected.
+ */
+const mobile = axios.create({
+  baseURL: '/api',
+  headers: { 'Content-Type': 'application/json' },
+});
+
+export const simAPI = {
+  /** Mint a token that acts as this user. */
+  tokenFor: (userId) => api.post(`/admin/users/${userId}/impersonate`),
+
+  as(token) {
+    const h = { headers: { Authorization: `Bearer ${token}` } };
+    return {
+      quote:   (body) => mobile.post('/rides/quote', body, h),
+      request: (body) => mobile.post('/rides/request', body, h),
+      status:  (rideId) => mobile.get(`/rides/${rideId}/status`, h),
+      active:  () => mobile.get('/rides/active', h),
+      respond: (rideId, action) => mobile.post(`/rides/${rideId}/respond`, { action }, h),
+      cancel:  (rideId) => mobile.post(`/rides/${rideId}/cancel`, {}, h),
+      retry:   (rideId) => mobile.post(`/rides/${rideId}/retry`, {}, h),
+      negotiate: (rideId, price) =>
+        mobile.post(`/rides/${rideId}/negotiation`, { price }, h),
+    };
+  },
+};
