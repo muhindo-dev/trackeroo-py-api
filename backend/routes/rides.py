@@ -696,6 +696,13 @@ def cancel_ride(user, ride_id):
     dispatch = RideDispatch.query.filter_by(negotiation_id=ride_id).first()
     if dispatch:
         dispatch.status = 'cancelled'
+    # Responding 'accept' or 'negotiate' marks the driver busy for 90 minutes.
+    # Completing and driver-cancelling both release that, but a customer
+    # cancellation did not — so a driver who merely opened a negotiation on a
+    # ride the customer then dropped stayed invisible to dispatch (and so never
+    # rang again) for the rest of the 90 minutes.
+    from backend.routes.negotiations import _free_driver
+    _free_driver(negotiation.driver_id)
     db.session.commit()
     return success_response("Ride cancelled")
 
