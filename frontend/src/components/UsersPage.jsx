@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { adminAPI } from '../services/api';
 // Lazy so Leaflet (~160 kB) is only fetched when an admin actually opens the picker.
 const LocationPickerModal = React.lazy(() => import('./LocationPickerModal'));
@@ -1084,26 +1085,50 @@ function EditDrawer({ user, onClose, onSave }) {
 }
 
 /* ─── Main UsersPage ───────────────────────────────────────────────────── */
+const PER_PAGE = 20;
+
 export default function UsersPage() {
+  // The URL query string is the single source of truth for what's on screen,
+  // so a refresh, a back/forward, or a pasted link all restore the same view.
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const page       = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+  const search     = searchParams.get('q') || '';
+  const filterType = searchParams.get('type') || '';
+  const openUserId = searchParams.get('user') || '';
+
   const [users, setUsers]       = useState([]);
-  const [page, setPage]         = useState(1);
   const [total, setTotal]       = useState(0);
-  const [search, setSearch]     = useState('');
-  const [filterType, setFilterType] = useState('');
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
   const [editing, setEditing]   = useState(null);
   const [driverReview, setDriverReview] = useState(null); // NEW: driver application review
   const [confirm, setConfirm]   = useState(null); // { id, action, label }
   const [actionLoading, setActionLoading] = useState({});
+  const [searchInput, setSearchInput] = useState(search); // typing buffer, committed on submit
 
-  const perPage = 20;
+  // Keep the box in step when the URL changes underneath us (back/forward, clear).
+  useEffect(() => { setSearchInput(search); }, [search]);
+
+  const perPage = PER_PAGE;
   const totalPages = Math.ceil(total / perPage);
 
-  const load = useCallback((p = page, q = search, type = filterType) => {
+  /* Merge a patch into the query string; '' or null removes the key. */
+  const patchParams = useCallback((patch, opts = {}) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(patch).forEach(([k, v]) => {
+        if (v === '' || v == null) next.delete(k);
+        else next.set(k, String(v));
+      });
+      return next;
+    }, { replace: !!opts.replace });
+  }, [setSearchParams]);
+
+  const load = useCallback((p, q, type) => {
     setLoading(true);
     setError(null);
-    const params = { page: p, per_page: perPage, search: q };
+    const params = { page: p, per_page: PER_PAGE, search: q };
     if (type) params.user_type = type;
     adminAPI.users(params)
       .then(({ data }) => {
@@ -1118,21 +1143,34 @@ export default function UsersPage() {
         if (err.response?.status !== 401) setError('Unable to connect to server');
       })
       .finally(() => setLoading(false));
-  }, [page, search, filterType]);
+  }, []);
 
-  useEffect(() => { load(1, '', ''); }, []);
+  // Single fetch trigger: whatever the URL says, that's what we show.
+  useEffect(() => { load(page, search, filterType); }, [page, search, filterType, load]);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    setPage(1);
-    load(1, search, filterType);
+    patchParams({ q: searchInput.trim(), page: 1 });
   };
 
   const handleFilterType = (type) => {
-    setFilterType(type);
-    setPage(1);
-    load(1, search, type);
+    patchParams({ type, page: 1 });
   };
+
+  /* Drawer is part of the URL too, so a refresh reopens the same user. */
+  const openEditor = (u) => { setEditing(u); patchParams({ user: u.id }); };
+  const closeEditor = () => { setEditing(null); patchParams({ user: '' }); };
+
+  useEffect(() => {
+    if (!openUserId) { setEditing(null); return; }
+    if (editing && String(editing.id) === String(openUserId)) return;
+    const inList = users.find((u) => String(u.id) === String(openUserId));
+    if (inList) { setEditing(inList); return; }
+    // Deep link to someone outside the current page — fetch them directly.
+    adminAPI.userShow(openUserId)
+      .then(({ data }) => { if (data.code === 1 && data.data) setEditing(data.data); })
+      .catch(() => {});
+  }, [openUserId, users]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setActionBusy = (id, busy) => setActionLoading((s) => ({ ...s, [id]: busy }));
 
@@ -1183,13 +1221,13 @@ export default function UsersPage() {
             <FiSearch style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#999', pointerEvents: 'none' }} size={15} />
             <input
               placeholder="Search name, email, phone…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               style={{ width: '100%', paddingLeft: 34, paddingRight: 10, height: 36, border: '1.5px solid #ccc', fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
             />
           </div>
           <button type="submit" className="btn btn-sm btn-primary">Search</button>
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setSearch(''); setPage(1); load(1, '', filterType); }}>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => patchParams({ q: '', page: 1 })}>
             <FiRefreshCw size={13} />
           </button>
         </form>
@@ -1287,7 +1325,7 @@ export default function UsersPage() {
                         <button
                           className="btn btn-xs"
                           title="Edit user"
-                          onClick={() => setEditing(u)}
+                          onClick={() => openEditor(u)}
                           style={{ borderColor: '#040404' }}
                         >
                           <FiEdit2 size={12} />
@@ -1376,7 +1414,7 @@ export default function UsersPage() {
           <button
             className="btn btn-sm btn-secondary"
             disabled={page <= 1}
-            onClick={() => { const p = page - 1; setPage(p); load(p, search, filterType); }}
+            onClick={() => patchParams({ page: page - 1 })}
           >
             <FiChevronLeft size={15} />
           </button>
@@ -1384,7 +1422,7 @@ export default function UsersPage() {
           <button
             className="btn btn-sm btn-secondary"
             disabled={page >= totalPages}
-            onClick={() => { const p = page + 1; setPage(p); load(p, search, filterType); }}
+            onClick={() => patchParams({ page: page + 1 })}
           >
             <FiChevronRight size={15} />
           </button>
@@ -1395,8 +1433,8 @@ export default function UsersPage() {
       {editing && (
         <EditDrawer
           user={editing}
-          onClose={() => setEditing(null)}
-          onSave={(updated) => { onSaveUser(updated); setEditing(null); }}
+          onClose={closeEditor}
+          onSave={(updated) => onSaveUser(updated)}
         />
       )}
 
