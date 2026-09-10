@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { adminAPI } from '../services/api';
+// Lazy so Leaflet (~160 kB) is only fetched when an admin actually opens the picker.
+const LocationPickerModal = React.lazy(() => import('./LocationPickerModal'));
 import {
   FiCheck, FiX, FiToggleLeft, FiToggleRight, FiSearch, FiChevronLeft,
   FiChevronRight, FiEdit2, FiTrash2, FiUser, FiAlertTriangle,
@@ -542,6 +544,10 @@ function EditDrawer({ user, onClose, onSave }) {
   const [settingOnline, setSettingOnline] = useState(false);
   const [imToken, setImToken] = useState('');
   const [impersonating, setImpersonating] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [geoAddress, setGeoAddress] = useState('');
+  const [baseline, setBaseline] = useState({});   // snapshot for unsaved-change detection
+  const [confirmMsg, setConfirmMsg] = useState(null); // { text, onYes }
 
   useEffect(() => {
     if (!user) return;
@@ -552,6 +558,8 @@ function EditDrawer({ user, onClose, onSave }) {
     // status is 1/0 in DB but 'active'/'inactive' in to_dict
     f.status = user.status === 'active' ? '1' : '0';
     setForm(f);
+    setBaseline(f);
+    setGeoAddress('');
     setGeo({
       latitude: user.current_latitude != null ? String(user.current_latitude) : '',
       longitude: user.current_longitude != null ? String(user.current_longitude) : '',
@@ -564,6 +572,25 @@ function EditDrawer({ user, onClose, onSave }) {
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
+  // Unsaved-change detection, so closing can never silently throw away edits.
+  const dirty = React.useMemo(
+    () => JSON.stringify(form) !== JSON.stringify(baseline),
+    [form, baseline],
+  );
+
+  const requestClose = useCallback(() => {
+    if (pickerOpen) return;                       // picker owns the Esc/close first
+    if (dirty && !window.confirm('You have unsaved changes. Discard them and close?')) return;
+    onClose();
+  }, [dirty, onClose, pickerOpen]);
+
+  // Esc closes the drawer (respecting unsaved changes); the picker traps its own Esc.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') requestClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [requestClose]);
+
   const handleSave = async () => {
     setSaving(true);
     setMsg(null);
@@ -574,6 +601,7 @@ function EditDrawer({ user, onClose, onSave }) {
       const { data } = await adminAPI.userUpdate(user.id, payload);
       if (data.code === 1) {
         setMsg({ type: 'success', text: 'Saved successfully' });
+        setBaseline(form);           // edits are now persisted; drawer is clean again
         onSave(data.data);
       } else {
         setMsg({ type: 'error', text: data.message || 'Save failed' });
@@ -619,20 +647,32 @@ function EditDrawer({ user, onClose, onSave }) {
     }
   };
 
-  const handleSetLocation = async () => {
-    const lat = parseFloat(geo.latitude), lng = parseFloat(geo.longitude);
+  // Accepts coords from the map picker, or falls back to the typed fields.
+  const handleSetLocation = async (coords) => {
+    const lat = coords ? Number(coords.latitude) : parseFloat(geo.latitude);
+    const lng = coords ? Number(coords.longitude) : parseFloat(geo.longitude);
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      setMsg({ type: 'error', text: 'Enter valid latitude and longitude' });
+      setMsg({ type: 'error', text: 'Enter a valid latitude and longitude, or pick a point on the map' });
+      return;
+    }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setMsg({ type: 'error', text: 'Coordinates are out of range' });
       return;
     }
     setSavingGeo(true);
     setMsg(null);
     try {
       const { data } = await adminAPI.userSetLocation(user.id, { latitude: lat, longitude: lng });
-      setMsg({ type: data.code === 1 ? 'success' : 'error', text: data.message || (data.code === 1 ? 'Location updated' : 'Failed') });
-      if (data.code === 1 && data.data) onSave(data.data);
+      if (data.code === 1) {
+        setGeo({ latitude: String(lat), longitude: String(lng) });
+        if (coords?.address) setGeoAddress(coords.address);
+        setMsg({ type: 'success', text: `Location set to ${lat.toFixed(6)}, ${lng.toFixed(6)}` });
+        if (data.data) onSave(data.data);
+      } else {
+        setMsg({ type: 'error', text: data.message || 'Could not update location' });
+      }
     } catch {
-      setMsg({ type: 'error', text: 'Network error' });
+      setMsg({ type: 'error', text: 'Network error — location not changed' });
     } finally {
       setSavingGeo(false);
     }
@@ -656,6 +696,8 @@ function EditDrawer({ user, onClose, onSave }) {
   };
 
   const handleImpersonate = async () => {
+    const who = user.name || user.email || `#${user.id}`;
+    if (!window.confirm(`Issue a login token that acts as ${who}?\n\nAnyone holding this token can use the app as this user. Only do this for support or debugging.`)) return;
     setImpersonating(true);
     setMsg(null);
     setImToken('');
@@ -678,27 +720,50 @@ function EditDrawer({ user, onClose, onSave }) {
     <div>
       {/* GPS override */}
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#999', marginBottom: 12 }}>GPS Location Override</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
-        <div>
-          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>Latitude</label>
-          <input type="number" step="any" value={geo.latitude}
-            onChange={(e) => setGeo((g) => ({ ...g, latitude: e.target.value }))}
-            placeholder="e.g. 6.5250"
-            style={{ width: '100%', padding: '9px 10px', fontSize: 13, border: '1.5px solid #ccc', outline: 'none', fontFamily: 'inherit' }} />
+
+      <div style={{ border: '1.5px solid #e6e6e6', background: '#fafafa', padding: 14, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 3 }}>Current position</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: geo.latitude ? '#040404' : '#999' }}>
+              {geo.latitude && geo.longitude
+                ? `${Number(geo.latitude).toFixed(6)}, ${Number(geo.longitude).toFixed(6)}`
+                : 'Not set'}
+            </div>
+            {geoAddress && (
+              <div style={{ fontSize: 12, color: '#777', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={geoAddress}>
+                {geoAddress}
+              </div>
+            )}
+          </div>
+          <button className="btn btn-sm btn-primary" onClick={() => setPickerOpen(true)} style={{ height: 38, flexShrink: 0 }}>
+            <FiMapPin size={14} /> Pick on map
+          </button>
         </div>
-        <div>
-          <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>Longitude</label>
-          <input type="number" step="any" value={geo.longitude}
-            onChange={(e) => setGeo((g) => ({ ...g, longitude: e.target.value }))}
-            placeholder="e.g. 3.3800"
-            style={{ width: '100%', padding: '9px 10px', fontSize: 13, border: '1.5px solid #ccc', outline: 'none', fontFamily: 'inherit' }} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>Latitude</label>
+            <input type="number" step="any" value={geo.latitude}
+              onChange={(e) => setGeo((g) => ({ ...g, latitude: e.target.value }))}
+              placeholder="e.g. 6.5250"
+              style={{ width: '100%', padding: '9px 10px', fontSize: 13, border: '1.5px solid #ccc', outline: 'none', fontFamily: 'inherit' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 4 }}>Longitude</label>
+            <input type="number" step="any" value={geo.longitude}
+              onChange={(e) => setGeo((g) => ({ ...g, longitude: e.target.value }))}
+              placeholder="e.g. 3.3800"
+              style={{ width: '100%', padding: '9px 10px', fontSize: 13, border: '1.5px solid #ccc', outline: 'none', fontFamily: 'inherit' }} />
+          </div>
+          <button className="btn btn-sm btn-secondary" onClick={() => handleSetLocation()} disabled={savingGeo} style={{ height: 38, flexShrink: 0 }}>
+            {savingGeo ? 'Saving…' : 'Save these coordinates'}
+          </button>
         </div>
-        <button className="btn btn-sm btn-primary" onClick={handleSetLocation} disabled={savingGeo} style={{ height: 38, flexShrink: 0 }}>
-          <FiMapPin size={14} />
-          {savingGeo ? '…' : 'Set GPS'}
-        </button>
       </div>
-      <p style={{ fontSize: 12, color: '#999', marginTop: 0, marginBottom: 24 }}>Moves the user on the live map instantly. Tip: Lagos is 6.5250, 3.3800.</p>
+      <p style={{ fontSize: 12, color: '#999', marginTop: 0, marginBottom: 24 }}>
+        Moves the user on the live map instantly and refreshes their location timestamp so dispatch treats them as live.
+      </p>
 
       {/* Presence */}
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#999', marginBottom: 12 }}>Presence & Availability</div>
@@ -916,17 +981,18 @@ function EditDrawer({ user, onClose, onSave }) {
   if (!user) return null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1500, display: 'flex' }} onClick={onClose}>
+    // Backdrop is inert on purpose — a stray click must never discard an edit.
+    // Close only via the X, Cancel, or Esc (all of which respect unsaved changes).
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1500, display: 'flex' }}>
       {/* backdrop */}
-      <div style={{ flex: 1, background: 'rgba(0,0,0,0.4)' }} />
+      <div style={{ flex: 1, background: 'rgba(0,0,0,0.45)' }} />
       {/* drawer */}
       <div
         style={{
-          width: 560, maxWidth: '95vw', background: '#fff',
+          width: 1040, maxWidth: '96vw', background: '#fff',
           display: 'flex', flexDirection: 'column', height: '100%',
-          boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
+          boxShadow: '-4px 0 32px rgba(0,0,0,0.22)',
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* header */}
         <div style={{ padding: '16px 20px', borderBottom: '2px solid #040404', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
@@ -939,8 +1005,13 @@ function EditDrawer({ user, onClose, onSave }) {
               {user.email || user.username} · #{user.id}
             </div>
           </div>
+          {dirty && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#8a6100', background: '#fff3d6', border: '1px solid #f0d492', padding: '3px 8px', whiteSpace: 'nowrap' }}>
+              UNSAVED
+            </span>
+          )}
           <Badge val={user.user_type} />
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', padding: 4 }}>
+          <button onClick={requestClose} title="Close (Esc)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', padding: 4 }}>
             <FiXCircle size={20} />
           </button>
         </div>
@@ -983,7 +1054,7 @@ function EditDrawer({ user, onClose, onSave }) {
         {/* footer — save only for Info/Driver/Services tabs */}
         {activeTab < 3 && (
           <div style={{ padding: '14px 20px', borderTop: '1px solid #eee', display: 'flex', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
-            <button className="btn btn-sm btn-secondary" onClick={onClose}>Cancel</button>
+            <button className="btn btn-sm btn-secondary" onClick={requestClose}>Cancel</button>
             <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={saving}>
               <FiSave size={14} />
               {saving ? 'Saving…' : 'Save Changes'}
@@ -991,6 +1062,23 @@ function EditDrawer({ user, onClose, onSave }) {
           </div>
         )}
       </div>
+
+      {pickerOpen && (
+        <React.Suspense fallback={
+          <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, fontWeight: 600 }}>
+            Loading map…
+          </div>
+        }>
+          <LocationPickerModal
+            open
+            initial={geo.latitude && geo.longitude ? { latitude: geo.latitude, longitude: geo.longitude } : null}
+            defaultCenter={[6.5250, 3.3800]}
+            title={`Set GPS location — ${user.name || user.email || `#${user.id}`}`}
+            onCancel={() => setPickerOpen(false)}
+            onConfirm={(loc) => { setPickerOpen(false); handleSetLocation(loc); }}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 }
