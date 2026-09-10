@@ -38,6 +38,7 @@ export default function LocationPickerModal({
   open,
   initial,
   defaultCenter = [6.5250, 3.3800],
+  countryCodes = '',            // e.g. 'ng,ug' — biases + speeds up search a lot
   title = 'Pick a location',
   onCancel,
   onConfirm,
@@ -45,6 +46,7 @@ export default function LocationPickerModal({
   const mapElRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const cacheRef = useRef(new Map());
 
   const [pos, setPos] = useState(null);          // { lat, lng }
   const [address, setAddress] = useState('');
@@ -52,6 +54,7 @@ export default function LocationPickerModal({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [noHits, setNoHits] = useState(false);
   const [err, setErr] = useState('');
   const [latText, setLatText] = useState('');
   const [lngText, setLngText] = useState('');
@@ -136,7 +139,7 @@ export default function LocationPickerModal({
   /* reset transient state each time it opens */
   useEffect(() => {
     if (!open) {
-      setResults([]); setQuery(''); setErr(''); setAddress(''); setPos(null);
+      setResults([]); setQuery(''); setErr(''); setAddress(''); setPos(null); setNoHits(false);
       setLatText(''); setLngText('');
     }
   }, [open]);
@@ -145,30 +148,57 @@ export default function LocationPickerModal({
   useEffect(() => {
     if (!open) return undefined;
     const q = query.trim();
-    if (q.length < 3) { setResults([]); return undefined; }
+    if (q.length < 3) { setResults([]); setSearching(false); setNoHits(false); return undefined; }
+
+    // Serve repeats instantly — retyping/backspacing shouldn't re-hit the network.
+    const cached = cacheRef.current.get(q.toLowerCase());
+    if (cached) { setResults(cached); setNoHits(cached.length === 0); setSearching(false); return undefined; }
+
+    // Show the spinner during the debounce too, so typing feels answered immediately.
+    setSearching(true);
+    setNoHits(false);
+
+    const ctl = new AbortController();
+    // Hard ceiling: a hung Nominatim must not spin forever.
+    const killer = setTimeout(() => ctl.abort(), 8000);
+
     const t = setTimeout(async () => {
-      setSearching(true);
       try {
+        const cc = countryCodes ? `&countrycodes=${countryCodes}` : '';
         const r = await fetch(
-          `${NOMINATIM}/search?format=jsonv2&limit=6&q=${encodeURIComponent(q)}`,
-          { headers: { Accept: 'application/json' } },
+          `${NOMINATIM}/search?format=jsonv2&limit=8&addressdetails=0${cc}&q=${encodeURIComponent(q)}`,
+          { headers: { Accept: 'application/json' }, signal: ctl.signal },
         );
-        setResults(await r.json() || []);
-      } catch {
+        const json = (await r.json()) || [];
+        cacheRef.current.set(q.toLowerCase(), json);
+        setResults(json);
+        setNoHits(json.length === 0);
+        setErr('');
+      } catch (e) {
+        if (e.name === 'AbortError') return;      // superseded or timed out; leave UI alone
         setResults([]);
+        setErr('Search is unavailable right now — you can still click the map or type coordinates.');
       } finally {
+        clearTimeout(killer);
         setSearching(false);
       }
-    }, 550); // Nominatim asks for <=1 req/sec
-    return () => clearTimeout(t);
-  }, [query, open]);
+    }, 350);
+
+    return () => { clearTimeout(t); clearTimeout(killer); ctl.abort(); };
+  }, [query, open, countryCodes]);
 
   const useMyLocation = () => {
     if (!navigator.geolocation) { setErr('This browser has no geolocation'); return; }
+    setErr('');
     navigator.geolocation.getCurrentPosition(
       (p) => placePin(p.coords.latitude, p.coords.longitude, { fly: true }),
-      () => setErr('Could not read your current location'),
-      { enableHighAccuracy: true, timeout: 10000 },
+      (e) => setErr(
+        e.code === 1 ? 'Location permission was denied for this site.'
+          : e.code === 3 ? 'Locating timed out. Search for the place instead, or click the map.'
+            : 'This device could not report a location (common on desktops). Search or click the map instead.',
+      ),
+      // Desktops have no GPS; high accuracy just guarantees kCLErrorLocationUnknown.
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
     );
   };
 
@@ -210,15 +240,31 @@ export default function LocationPickerModal({
                 placeholder="Search a place, street, town or landmark…"
                 style={{ ...input, paddingLeft: 30 }}
               />
-              {searching && <FiLoader size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#999' }} />}
+              {searching && (
+                <FiLoader
+                  size={14}
+                  style={{ position: 'absolute', right: 10, top: '50%', marginTop: -7, color: '#EF9B11', animation: 'spin .6s linear infinite' }}
+                />
+              )}
             </div>
             <button className="btn btn-sm btn-secondary" onClick={useMyLocation} style={{ height: 38, flexShrink: 0, whiteSpace: 'nowrap' }}>
               <FiCrosshair size={14} /> My location
             </button>
           </div>
 
-          {results.length > 0 && (
-            <div style={{ position: 'absolute', left: 18, right: 18, top: '100%', background: '#fff', border: '1.5px solid #ccc', borderTop: 'none', maxHeight: 240, overflowY: 'auto', zIndex: 20, boxShadow: '0 6px 18px rgba(0,0,0,0.12)' }}>
+          {(searching || noHits || results.length > 0) && query.trim().length >= 3 && (
+            <div style={{ position: 'absolute', left: 18, right: 18, top: '100%', background: '#fff', border: '1.5px solid #ccc', borderTop: 'none', maxHeight: 260, overflowY: 'auto', zIndex: 20, boxShadow: '0 6px 18px rgba(0,0,0,0.12)' }}>
+              {searching && (
+                <div style={{ padding: '10px 12px', fontSize: 12.5, color: '#777', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FiLoader size={13} style={{ animation: 'spin .6s linear infinite', color: '#EF9B11' }} />
+                  Searching places…
+                </div>
+              )}
+              {!searching && noHits && (
+                <div style={{ padding: '10px 12px', fontSize: 12.5, color: '#777' }}>
+                  No place matched “{query.trim()}”. Try a nearby town, or click the map directly.
+                </div>
+              )}
               {results.map((r) => (
                 <div
                   key={r.place_id}

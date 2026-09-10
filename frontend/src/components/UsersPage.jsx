@@ -37,9 +37,39 @@ function Badge({ val, label }) {
   );
 }
 
+/* Some legacy rows carry dev-only avatar URLs — e.g. http://10.0.2.2:8888/...,
+ * the Android emulator's alias for the dev machine. On the HTTPS admin those are
+ * blocked as mixed content AND hang until the socket times out, which stalls the
+ * whole page. Screen them out and fall back to initials. */
+function usableAvatar(url) {
+  if (!url || typeof url !== 'string') return null;
+  const raw = url.trim();
+  if (!raw) return null;
+  if (raw.startsWith('data:') || raw.startsWith('/')) return raw;   // inline or same-origin
+  let u;
+  try { u = new URL(raw, window.location.origin); } catch { return null; }
+  if (window.location.protocol === 'https:' && u.protocol === 'http:') return null;
+  const h = u.hostname;
+  if (h === 'localhost' || h === '10.0.2.2' || h.startsWith('127.')) return null;
+  if (/^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)) return null;
+  return u.href;
+}
+
 function Avatar({ name, avatar }) {
-  if (avatar) return <img src={avatar} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />;
+  const [failed, setFailed] = useState(false);
+  const src = usableAvatar(avatar);
   const init = (name || '?')[0].toUpperCase();
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+      />
+    );
+  }
   return (
     <div style={{
       width: 32, height: 32, borderRadius: '50%', background: '#EF9B11',
@@ -1074,6 +1104,7 @@ function EditDrawer({ user, onClose, onSave }) {
             open
             initial={geo.latitude && geo.longitude ? { latitude: geo.latitude, longitude: geo.longitude } : null}
             defaultCenter={[6.5250, 3.3800]}
+            countryCodes="ng,ug"
             title={`Set GPS location — ${user.name || user.email || `#${user.id}`}`}
             onCancel={() => setPickerOpen(false)}
             onConfirm={(loc) => { setPickerOpen(false); handleSetLocation(loc); }}
