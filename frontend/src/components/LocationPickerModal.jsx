@@ -229,7 +229,7 @@ export default function LocationPickerModal({
         </div>
 
         {/* search */}
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid #eee', flexShrink: 0, position: 'relative' }}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid #eee', flexShrink: 0, position: 'relative', zIndex: 1200, background: '#fff' }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <FiSearch size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
@@ -253,7 +253,7 @@ export default function LocationPickerModal({
           </div>
 
           {(searching || noHits || results.length > 0) && query.trim().length >= 3 && (
-            <div style={{ position: 'absolute', left: 18, right: 18, top: '100%', background: '#fff', border: '1.5px solid #ccc', borderTop: 'none', maxHeight: 260, overflowY: 'auto', zIndex: 20, boxShadow: '0 6px 18px rgba(0,0,0,0.12)' }}>
+            <div style={{ position: 'absolute', left: 18, right: 18, top: '100%', background: '#fff', border: '1.5px solid #ccc', borderTop: 'none', maxHeight: 260, overflowY: 'auto', zIndex: 1210, boxShadow: '0 6px 18px rgba(0,0,0,0.12)' }}>
               {searching && (
                 <div style={{ padding: '10px 12px', fontSize: 12.5, color: '#777', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FiLoader size={13} style={{ animation: 'spin .6s linear infinite', color: '#EF9B11' }} />
@@ -281,7 +281,7 @@ export default function LocationPickerModal({
         </div>
 
         {/* map */}
-        <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+        <div style={{ flex: 1, position: 'relative', minHeight: 0, zIndex: 0 }}>
           <div ref={mapElRef} style={{ position: 'absolute', inset: 0 }} />
           <div style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 500, background: 'rgba(255,255,255,0.95)', border: '1px solid #ddd', padding: '6px 10px', fontSize: 11.5, color: '#555', maxWidth: '70%' }}>
             Click the map or drag the pin to set the exact point.
