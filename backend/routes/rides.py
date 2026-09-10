@@ -548,6 +548,34 @@ def ride_status(user, ride_id):
     return success_response("Ride status", _status_payload(negotiation, dispatch, include_proposals=True))
 
 
+@rides_bp.route('/api/rides/<int:ride_id>/retry', methods=['POST'])
+@jwt_required_with_user
+def retry_dispatch(user, ride_id):
+    """Customer taps "Search again" after a no_match.
+
+    Drivers come online constantly, so the useful thing is to re-rank against
+    who is live *now* rather than make them cancel and re-enter the trip. We
+    clear the candidate list so _begin_dispatch recomputes instead of replaying
+    the stale one.
+    """
+    negotiation = db.session.get(Negotiation, ride_id)
+    if not negotiation or negotiation.customer_id != user.id:
+        return error_response("Ride not found", status_code=404)
+    dispatch = RideDispatch.query.filter_by(negotiation_id=ride_id).first()
+    if not dispatch:
+        return error_response("Ride not found", status_code=404)
+    if dispatch.status != 'no_match':
+        return error_response("This ride is not waiting for a new search")
+
+    dispatch.candidates = json.dumps([])
+    found = _begin_dispatch(dispatch, negotiation)
+    db.session.commit()
+    return success_response(
+        "Searching for a driver now" if found
+        else "Still no driver free nearby right now",
+        _status_payload(negotiation, dispatch, include_proposals=True))
+
+
 @rides_bp.route('/api/rides/<int:ride_id>/respond', methods=['POST'])
 @jwt_required_with_user
 def respond(user, ride_id):
