@@ -166,6 +166,15 @@ def _online_drivers(service_group, ignore_group=False):
             continue
         if Subscription.active_for_driver(d.id) is None:
             continue
+        # Approval is checked here too, not just at go-online: flags can be
+        # revoked by an admin while a driver is already live, and a revoked
+        # driver must stop receiving offers immediately rather than at their
+        # next toggle. When the group is ignored, any approval will do.
+        if ignore_group:
+            if not d.approved_groups:
+                continue
+        elif not d.is_approved_for(service_group or d.live_service_group):
+            continue
         drivers.append(d)
     return drivers
 

@@ -111,6 +111,33 @@ class AdminUser(db.Model):
     def is_online(self):
         return self.ready_for_trip
 
+    # A driver's capability flag (is_boda) only says what they *offer*; the
+    # matching *_approved flag is the one an admin sets after reviewing them.
+    # Operating on the capability flag alone is how unapproved applicants ended
+    # up taking real trips.
+    SERVICE_GROUP_APPROVAL = {
+        'Boda': 'is_boda_approved',
+        'Special Hire': 'is_car_approved',
+        'Truck': 'is_delivery_approved',
+    }
+
+    def is_approved_for(self, service_group):
+        """True only when an admin has approved this driver for that group.
+
+        Fails closed: an unknown or missing group is not approved, so a new
+        service group cannot silently inherit open access.
+        """
+        flag = self.SERVICE_GROUP_APPROVAL.get((service_group or '').strip())
+        if not flag:
+            return False
+        return str(getattr(self, flag, 'No') or 'No').strip().lower() == 'yes'
+
+    @property
+    def approved_groups(self):
+        """Every service group this driver may currently operate in."""
+        return [g for g, f in self.SERVICE_GROUP_APPROVAL.items()
+                if str(getattr(self, f, 'No') or 'No').strip().lower() == 'yes']
+
     def set_password(self, password):
         self.password = bcrypt.hashpw(
             password.encode('utf-8'),

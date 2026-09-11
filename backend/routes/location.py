@@ -89,7 +89,6 @@ def update_online_status(user):
         blocked = _subscription_block(user, status == 'online')
         if blocked is not None:
             return blocked
-        user.ready_for_trip = 'Yes' if status == 'online' else 'No'
         # V2: driver declares which service they're going live for (dynamic groups)
         if status == 'online':
             group = (data.get('service_group') or '').strip()
@@ -100,8 +99,30 @@ def update_online_status(user):
                 if group not in valid:
                     return error_response(
                         f"Invalid service_group. Choose one of: {', '.join(sorted(valid))}")
+
+            # Approval is the gate, not the subscription. Paying only proves a
+            # driver is billable; an admin still has to review their licence and
+            # vehicle. Without this check an applicant could pay, go live and
+            # carry real passengers before anyone had looked at them.
+            if not user.is_approved_for(group):
+                approved = user.approved_groups
+                return error_response(
+                    (f"Your account is approved for {', '.join(approved)}. "
+                     f"Choose one of those to go online."
+                     if approved else
+                     "Your driver application is still under review. "
+                     "You'll be able to go online once it is approved."),
+                    data={
+                        'requires_approval': True,
+                        'requested_group': group or None,
+                        'approved_groups': approved,
+                    },
+                    status_code=403,
+                )
+            if group:
                 user.live_service_group = group
-        else:
+        user.ready_for_trip = 'Yes' if status == 'online' else 'No'
+        if status != 'online':
             user.live_service_group = None
         if lat or lng:
             user.last_location_update = datetime.utcnow()
