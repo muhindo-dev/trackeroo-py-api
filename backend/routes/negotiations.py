@@ -601,16 +601,30 @@ def with_payment(user, neg_id):
 @negotiations_bp.route('/api/negotiations/<int:neg_id>/set-agreed-price', methods=['POST'])
 @jwt_required_with_user
 def set_agreed_price(user, neg_id):
-    """Set agreed price (1000-1000000 cents)."""
-    data = request.get_json(silent=True) or request.form
-    agreed_price = int(data.get('agreed_price', 0))
+    """Set the agreed price (in CENTS) on a ride you are part of.
 
-    if agreed_price < 1000 or agreed_price > 1000000:
-        return error_response("Agreed price must be between ₦1,000 and ₦10,000,000")
-
+    agreed_price is the gate for starting a trip and the basis for crediting
+    the driver on completion, so this was the most valuable unguarded write in
+    the API: with no participant check any caller could set any ride's fare to
+    the maximum and have it paid out. It now requires that the caller is on the
+    ride and that the ride is still open.
+    """
     negotiation = Negotiation.query.get(neg_id)
     if not negotiation:
         return error_response("Negotiation not found", status_code=404)
+    if not _is_participant(negotiation, user.id):
+        return error_response("This is not your ride", status_code=403)
+    if (negotiation.status or '') in ('Completed', 'Cancelled'):
+        return error_response(f"This ride is already {negotiation.status}")
+
+    data = request.get_json(silent=True) or request.form or {}
+    try:
+        agreed_price = int(float(data.get('agreed_price', 0)))
+    except (TypeError, ValueError):
+        return error_response("Agreed price must be a number")
+
+    if agreed_price < 1000 or agreed_price > 1000000:
+        return error_response("Agreed price must be between ₦1,000 and ₦10,000,000")
 
     negotiation.agreed_price = agreed_price
     db.session.commit()

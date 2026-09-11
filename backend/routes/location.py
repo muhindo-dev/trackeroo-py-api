@@ -77,10 +77,18 @@ def update_online_status(user):
     lat = data.get('latitude') or data.get('lati')
     lng = data.get('longitude') or data.get('long')
 
-    if lat:
-        user.current_latitude = lat
-    if lng:
-        user.current_longitude = lng
+    if lat not in (None, '') and lng not in (None, ''):
+        try:
+            flat, flng = float(lat), float(lng)
+        except (TypeError, ValueError):
+            return error_response("latitude and longitude must be numbers")
+        if not (-90 <= flat <= 90) or not (-180 <= flng <= 180):
+            return error_response("Coordinates out of range")
+        user.current_latitude = flat
+        user.current_longitude = flng
+        # Stamp freshness whenever a position arrives. This was inside the
+        # longitude branch, so a latitude-only report left the driver looking
+        # stale to dispatch.
         user.location_updated_at = datetime.utcnow()
 
     if status:
@@ -172,11 +180,17 @@ def update_location(user):
     lat = data.get('latitude')
     lng = data.get('longitude')
 
-    if lat is None or lng is None:
+    if lat is None or lng is None or lat == '' or lng == '':
         return error_response("latitude and longitude are required")
 
-    lat = float(lat)
-    lng = float(lng)
+    # An empty string passed the `is None` check and then blew up in float(),
+    # returning a 500 to the driver heartbeat. A driver whose position stops
+    # being accepted silently ages out of dispatch.
+    try:
+        lat = float(lat)
+        lng = float(lng)
+    except (TypeError, ValueError):
+        return error_response("latitude and longitude must be numbers")
     if lat < -90 or lat > 90:
         return error_response("Invalid latitude")
     if lng < -180 or lng > 180:

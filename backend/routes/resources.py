@@ -5,7 +5,7 @@ from backend.models.route_stage import RouteStage
 from backend.models.company import Company
 from backend.models.trip import Trip
 from backend.models.trip_booking import TripBooking
-from backend.utils.auth import jwt_required_with_user
+from backend.utils.auth import jwt_required_with_user, admin_required
 from backend.utils.response import success_response, error_response
 import importlib, math
 
@@ -133,20 +133,27 @@ def contacts_statistics(user):
 
 
 # ---------------------------------------------------------------------------
-# Unauthenticated utility routes
+# Admin utility routes
+#
+# These were unauthenticated. AdminUser.to_dict() carries email, phone, NIN,
+# driving licence number and photo, date of birth, home address and live GPS,
+# so anyone who knew the URL could enumerate the whole user base. The apps
+# never call either route.
 # ---------------------------------------------------------------------------
 
 @resources_bp.route('/api/users', methods=['GET'])
-def search_users():
-    """Search admin users by name (no auth)."""
+@admin_required
+def search_users(user):
+    """Search admin users by name. Admin only."""
     q = request.args.get('q', '')
     users = AdminUser.query.filter(AdminUser.name.ilike(f'%{q}%')).limit(20).all()
     return success_response("Success", [u.to_dict() for u in users])
 
 
 @resources_bp.route('/api/ajax', methods=['GET'])
-def ajax_search():
-    """Dynamic model AJAX search (no auth)."""
+@admin_required
+def ajax_search(user):
+    """Dynamic model AJAX search. Admin only."""
     model_name = request.args.get('model')
     q = request.args.get('q', '')
     search_by_1 = request.args.get('search_by_1', 'name')

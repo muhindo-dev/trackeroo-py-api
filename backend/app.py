@@ -104,6 +104,31 @@ def create_app():
             return error_response("Method not allowed for this endpoint.", status_code=405)
         return _error
 
+    @app.errorhandler(Exception)
+    def handle_unexpected(error):
+        """Last line of defence for the API.
+
+        Any unguarded int()/float()/None dereference used to reach the client
+        as a bare HTTP 500 with a stack trace, which the apps read as a hard
+        failure rather than a retryable error. Roll the transaction back so the
+        connection isn't left dirty, log the real cause for us, and return the
+        envelope every client already understands.
+        """
+        from werkzeug.exceptions import HTTPException
+        if isinstance(error, HTTPException):
+            return error
+        try:
+            from backend.models import db
+            db.session.rollback()
+        except Exception:
+            pass
+        app.logger.exception("Unhandled error on %s %s", request.method, request.path)
+        if request.path.startswith('/api/'):
+            return error_response(
+                "Something went wrong on our side. Please try again.",
+                status_code=500)
+        raise error
+
     # Serve uploaded files
     @app.route('/uploads/<path:filename>')
     def serve_upload(filename):

@@ -10,6 +10,14 @@ from backend.utils.response import success_response, error_response
 chat_bp = Blueprint('chat', __name__)
 
 
+def _in_thread(head, user_id):
+    """A chat head's two sides are product_owner_id (driver) and customer_id."""
+    if not head:
+        return False
+    return user_id in (head.product_owner_id, head.customer_id)
+
+
+
 @chat_bp.route('/api/chat-heads', methods=['GET'])
 @jwt_required_with_user
 def chat_heads(user):
@@ -75,12 +83,25 @@ def messages(user):
     chat_head_id = request.args.get('chat_head_id')
 
     if chat_head_id:
+        # Threads are sequential, so without this check any logged-in user
+        # could page through the entire message store by incrementing the id
+        # (and silently mark other people's messages read).
+        try:
+            head_id = int(chat_head_id)
+        except (TypeError, ValueError):
+            return error_response("chat_head_id must be a number")
+        head = ChatHead.query.get(head_id)
+        if not head:
+            return error_response("Conversation not found", status_code=404)
+        if not _in_thread(head, user.id):
+            return error_response("This is not your conversation", status_code=403)
+
         msgs = ChatMessage.query.filter_by(
-            chat_head_id=int(chat_head_id)
+            chat_head_id=head_id
         ).order_by(ChatMessage.created_at.asc()).all()
 
         ChatMessage.query.filter_by(
-            chat_head_id=int(chat_head_id)
+            chat_head_id=head_id
         ).filter(
             ChatMessage.sender_id != user.id,
             ChatMessage.status != 'read',
@@ -107,12 +128,24 @@ def send_message(user):
     if not all([receiver_id, chat_head_id, body]):
         return error_response("receiver_id, chat_head_id, and body are required")
 
-    receiver = AdminUser.query.get(int(receiver_id))
+    try:
+        head_id, receiver_pk = int(chat_head_id), int(receiver_id)
+    except (TypeError, ValueError):
+        return error_response("chat_head_id and receiver_id must be numbers")
+
+    # Posting into an arbitrary thread let anyone impersonate a conversation.
+    head = ChatHead.query.get(head_id)
+    if not head:
+        return error_response("Conversation not found", status_code=404)
+    if not _in_thread(head, user.id):
+        return error_response("This is not your conversation", status_code=403)
+
+    receiver = AdminUser.query.get(receiver_pk)
 
     msg = ChatMessage(
-        chat_head_id=int(chat_head_id),
+        chat_head_id=head_id,
         sender_id=user.id,
-        receiver_id=int(receiver_id),
+        receiver_id=receiver_pk,
         sender_name=user.name,
         sender_photo=user.avatar if hasattr(user, 'avatar') else None,
         receiver_name=receiver.name if receiver else None,
@@ -123,7 +156,6 @@ def send_message(user):
     )
     db.session.add(msg)
 
-    head = ChatHead.query.get(int(chat_head_id))
     if head:
         head.last_message_body = body[:200] if len(body) > 200 else body
         head.last_message_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')

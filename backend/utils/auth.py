@@ -8,29 +8,29 @@ from backend.models.user import AdminUser
 
 
 def get_current_user():
-    """
-    Get the current authenticated user.
-    Supports Laravel's multi-fallback JWT chain:
-    1. Authorization: {token}
-    2. Authorization: Bearer {token}
-    3. Authorization: Token {token}
-    4. token query parameter
-    5. token POST body
-    6. user_id POST body (legacy fallback)
+    """Return the caller, identified solely by a verified JWT.
+
+    This used to fall back to a `user_id` in the query string or body whenever
+    JWT verification failed — including when no token was sent at all. That was
+    a complete authentication bypass: with sequential user ids, anyone could act
+    as anyone by adding `?user_id=N`, and because admin_required() uses this same
+    helper it also handed out admin powers. Proven against production with
+    `POST /api/update-online-status {"user_id": <driver>, "status": "offline"}`
+    and no Authorization header, which returned 200 and took that driver offline.
+
+    The apps have always sent `Authorization: Bearer <token>`; the fallback was
+    only ever masking expired sessions, which should re-authenticate instead.
     """
     try:
         verify_jwt_in_request()
         user_id = get_jwt_identity()
-        return db.session.get(AdminUser, int(user_id))
     except Exception:
-        # Fallback: check user_id in request body or query
-        user_id = (
-            request.form.get('user_id') or
-            request.args.get('user_id') or
-            (request.get_json(silent=True) or {}).get('user_id')
-        )
-        if user_id:
-            return db.session.get(AdminUser, int(user_id))
+        return None
+    if user_id is None:
+        return None
+    try:
+        return db.session.get(AdminUser, int(user_id))
+    except (TypeError, ValueError):
         return None
 
 

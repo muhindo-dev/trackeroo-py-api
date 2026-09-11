@@ -541,6 +541,13 @@ def ride_status(user, ride_id):
     negotiation = db.session.get(Negotiation, ride_id)
     if not negotiation:
         return error_response("Ride not found", status_code=404)
+    # The payload carries both parties' names, phone numbers and addresses, and
+    # this call also advances the dispatch as a side effect — so an outsider
+    # polling a sequential id could both harvest contact details and expire
+    # someone else's offer onto the next driver.
+    if user.id not in (negotiation.customer_id, negotiation.driver_id) \
+            and user.user_type not in ('Admin', 'Super Admin'):
+        return error_response("This is not your ride", status_code=403)
     dispatch = RideDispatch.query.filter_by(negotiation_id=ride_id).first()
 
     if dispatch and dispatch.status == 'scheduled' and _is_due(dispatch):
@@ -681,6 +688,16 @@ def choose_driver(user, ride_id):
     d = db.session.get(AdminUser, driver_id)
     if not d:
         return error_response("Driver not found", status_code=404)
+    if d.user_type not in ('Driver', 'Pending Driver'):
+        return error_response("That account is not a driver")
+    # Without a state guard this re-offered a ride that was already accepted or
+    # under way: the new driver replaced the old one mid-trip, and the original
+    # driver started getting 403s on arrived/start/complete and lost the fare.
+    if (negotiation.status or '') in ('Accepted', 'Started', 'Completed', 'Cancelled'):
+        return error_response(
+            f"This ride is already {negotiation.status} — you cannot pick another driver.")
+    if dispatch.status in ('matched', 'cancelled'):
+        return error_response("This ride already has a driver.")
 
     lst = dispatch.candidate_list()
     lst.append(driver_id)
@@ -932,6 +949,14 @@ def driver_complete(user, ride_id):
         return success_response("Trip already completed", n.to_dict())
     if n.status not in ('Started', 'Accepted'):
         return error_response(f"Cannot complete — the trip is {n.status}")
+    # Completing straight from 'Accepted' skipped the agreed-price gate that
+    # /start enforces, and _credit_driver_earning then falls back to
+    # initial_price — paying out the customer's opening offer for a trip that
+    # never ran. Allow it only when a fare was actually settled, so a driver who
+    # forgot to tap Start isn't stranded.
+    if n.status == 'Accepted' and not n.agreed_price:
+        return error_response(
+            "Agree a price and start the trip before completing it.")
 
     from backend.routes.negotiations import _credit_driver_earning, _free_driver
     n.status = 'Completed'
