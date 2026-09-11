@@ -198,7 +198,7 @@ def user_growth(user):
 # ═══════════════════════════════════════════════════════════════════════════
 
 @admin_bp.route('/api/admin/users', methods=['GET'])
-@jwt_required_with_user
+@admin_required
 def users_index(user):
     """List all users with search, filter, and pagination."""
     page = int(request.args.get('page', 1))
@@ -237,7 +237,7 @@ def users_index(user):
 
 
 @admin_bp.route('/api/admin/users/<int:user_id>', methods=['GET'])
-@jwt_required_with_user
+@admin_required
 def users_show(user, user_id):
     """Get detailed user info including wallet and activity."""
     target = AdminUser.query.get(user_id)
