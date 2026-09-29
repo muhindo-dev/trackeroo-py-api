@@ -86,7 +86,7 @@ class ScheduledBooking(db.Model):
     driver_selected_by_customer = db.Column(db.SmallInteger, default=0)
     distance_km = db.Column(db.Numeric(10, 3), default=0)
     estimated_duration_minutes = db.Column(db.Integer, default=0)
-    agreed_price_cad = db.Column(db.Numeric(8, 2), default=0)
+    agreed_price_cad = db.Column(db.Numeric(30, 2), default=0)
 
     # Flutterwave payment fields (migration 0009)
     flw_tx_ref = db.Column(db.String(255), nullable=True, index=True)
@@ -95,7 +95,7 @@ class ScheduledBooking(db.Model):
     flw_payment_type = db.Column(db.String(100), nullable=True)
     flw_payment_data = db.Column(db.JSON, nullable=True)
     flw_verified_at = db.Column(db.DateTime, nullable=True)
-    amount_ngn = db.Column(db.Numeric(12, 2), default=0)
+    amount_ngn = db.Column(db.Numeric(30, 2), default=0)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

@@ -45,8 +45,8 @@ class Negotiation(db.Model):
     details = db.Column(db.Text, nullable=True)
 
     # Pricing
-    initial_price = db.Column(db.Integer, nullable=True)  # In CENTS
-    agreed_price = db.Column(db.Numeric(10, 2), nullable=True)  # In DOLLARS
+    initial_price = db.Column(db.BigInteger, nullable=True)  # In CENTS
+    agreed_price = db.Column(db.Numeric(30, 2), nullable=True)  # In CENTS (legacy storage convention)
 
     # Payment
     payment_status = db.Column(db.Enum('unpaid', 'pending', 'paid', 'failed', 'refunded'), default='unpaid')

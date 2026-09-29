@@ -9,10 +9,10 @@ class PayoutRequest(db.Model):
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('admin_users.id'), nullable=False)
     payout_account_id = db.Column(db.BigInteger, db.ForeignKey('payout_accounts.id'), nullable=False)
-    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    amount = db.Column(db.Numeric(30, 2), nullable=False)
     currency = db.Column(db.String(3), default='NGN')
-    fee_amount = db.Column(db.Numeric(10, 2), default=0)
-    net_amount = db.Column(db.Numeric(10, 2), nullable=False)
+    fee_amount = db.Column(db.Numeric(30, 2), default=0)
+    net_amount = db.Column(db.Numeric(30, 2), nullable=False)
     status = db.Column(db.String(30), default='pending')
     payout_method = db.Column(db.String(30), default='bank_transfer')
     # Flutterwave transfer fields

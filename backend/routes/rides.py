@@ -56,13 +56,10 @@ LOCATION_STALE_MINUTES = 45
 # require an exact group match.
 ALLOW_CROSS_GROUP_FALLBACK = True
 
-# Sanity limits. A bad/stale GPS fix (e.g. an emulator sitting in California
-# while the destination is in Lagos) used to produce a 16,000 km trip whose
-# fare overflowed negotiations.agreed_price DECIMAL(10,2) — a hard 500.
+# Trip plausibility checks remain separate from pricing: there is no business
+# fare ceiling. Migration 0022 widens the old fare and settlement columns.
 MAX_TRIP_KM = 1500.0
 MAX_TRIP_MINUTES = 24 * 60
-MAX_FARE = 900000.0            # ₦ — anything above this is a data error
-PRICE_CENTS_CEILING = 99999999  # DECIMAL(10,2) holds at most 99,999,999.99
 
 # Book for later
 MIN_SCHEDULE_MINUTES = 10      # must be at least this far out
@@ -78,8 +75,8 @@ def _num(v, d=0.0):
 
 
 def _price_cents(price):
-    """Legacy cents convention, clamped so it can never overflow the column."""
-    return min(int(round(_num(price) * 100)), PRICE_CENTS_CEILING)
+    """Convert to minor units without imposing a business fare ceiling."""
+    return int(round(_num(price) * 100))
 
 
 def _validate_trip(data):
@@ -386,11 +383,9 @@ def request_ride(user):
     # The system price is a STARTING POINT, not a verdict. The customer may
     # send a different figure, and the driver may counter it — nothing is
     # binding until both sides accept in the negotiation chat.
-    price = _num(data.get('proposed_price')) or suggested
-    if price > MAX_FARE:
-        return error_response(
-            "That fare is outside our limits — please check the trip details.")
-    if price <= 0:
+    raw_price = data.get('proposed_price')
+    price = suggested if raw_price in (None, '') else _num(raw_price)
+    if not math.isfinite(price) or price <= 0:
         return error_response("Enter a fare to propose.")
 
     payment_method = (data.get('payment_method') or '').strip() or None
@@ -1231,10 +1226,8 @@ def negotiation_act(user, ride_id):
 
     if action == 'offer':
         amount = _num(data.get('price'))
-        if amount <= 0:
+        if not math.isfinite(amount) or amount <= 0:
             return error_response("Enter an amount to offer.")
-        if amount > MAX_FARE:
-            return error_response("That amount is outside our limits.")
         db.session.add(NegotiationRecord(
             negotiation_id=n.id, customer_id=n.customer_id,
             driver_id=n.driver_id or 0,

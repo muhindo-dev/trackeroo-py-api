@@ -163,7 +163,7 @@ def create_legacy(user):
     price_raw = data.get('price', 0)
     try:
         price_cents = int(float(price_raw) * 100)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         price_cents = 0
 
     negotiation = Negotiation(
@@ -329,7 +329,7 @@ def records_post(user):
     price_raw = data.get('price', 0)
     try:
         price_cents = int(float(price_raw) * 100)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         price_cents = 0
 
     message_body = data.get('message_body', '')
@@ -620,11 +620,11 @@ def set_agreed_price(user, neg_id):
     data = request.get_json(silent=True) or request.form or {}
     try:
         agreed_price = int(float(data.get('agreed_price', 0)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return error_response("Agreed price must be a number")
 
-    if agreed_price < 1000 or agreed_price > 1000000:
-        return error_response("Agreed price must be between ₦1,000 and ₦10,000,000")
+    if agreed_price <= 0:
+        return error_response("Agreed price must be greater than zero")
 
     negotiation.agreed_price = agreed_price
     db.session.commit()

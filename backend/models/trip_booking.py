@@ -19,7 +19,7 @@ class TripBooking(db.Model):
     start_time = db.Column(db.String(255), nullable=True)
     end_time = db.Column(db.String(255), nullable=True)
     slot_count = db.Column(db.Integer, nullable=True)
-    price = db.Column(db.Integer, nullable=True)
+    price = db.Column(db.BigInteger, nullable=True)
     customer_note = db.Column(db.Text, nullable=True)
     driver_notes = db.Column(db.Text, nullable=True)
 

@@ -8,14 +8,14 @@ class UserWallet(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     user_id = db.Column(db.BigInteger, db.ForeignKey('admin_users.id'), unique=True, nullable=False)
-    wallet_balance = db.Column(db.Numeric(10, 2), default=0)
-    total_earnings = db.Column(db.Numeric(10, 2), default=0)
+    wallet_balance = db.Column(db.Numeric(30, 2), default=0)
+    total_earnings = db.Column(db.Numeric(30, 2), default=0)
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_account_id = db.Column(db.String(255), unique=True, nullable=True)
 
     # Subscription earnings model (migration 0015)
-    paid_balance = db.Column(db.Numeric(10, 2), default=0)        # settled, >24h, withdrawable
-    unpaid_balance = db.Column(db.Numeric(10, 2), default=0)      # accruing within 24h
+    paid_balance = db.Column(db.Numeric(30, 2), default=0)        # settled, >24h, withdrawable
+    unpaid_balance = db.Column(db.Numeric(30, 2), default=0)      # accruing within 24h
     reclaim_fee_rate = db.Column(db.Numeric(4, 2), default=0.10)  # early-withdraw fee (fraction)
 
     # Timestamps

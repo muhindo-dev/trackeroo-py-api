@@ -22,7 +22,7 @@ class Trip(db.Model):
     slots = db.Column(db.Integer, nullable=True)
     details = db.Column(db.Text, nullable=True)
     car_model = db.Column(db.Text, nullable=True)
-    price = db.Column(db.Integer, nullable=True)
+    price = db.Column(db.BigInteger, nullable=True)
     start_gps = db.Column(db.Text, nullable=True)
     end_pgs = db.Column(db.Text, nullable=True)
     start_name = db.Column(db.Text, nullable=True)

@@ -13,7 +13,7 @@ class NegotiationRecord(db.Model):
     last_negotiator_id = db.Column(db.Integer, nullable=False)
     first_negotiator_id = db.Column(db.Integer, nullable=False)
     price_accepted = db.Column(db.String(10), default='No')
-    price = db.Column(db.Integer, nullable=False)  # In CENTS
+    price = db.Column(db.BigInteger, nullable=False)  # In CENTS
     message_type = db.Column(db.String(255), default='Negotiation')
     message_body = db.Column(db.Text, nullable=True)
     image_url = db.Column(db.Text, nullable=True)
