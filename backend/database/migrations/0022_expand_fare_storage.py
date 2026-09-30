@@ -35,7 +35,15 @@ def up(conn):
                 definition = f"MODIFY COLUMN `{column}` {sql_type}"
                 definition += ' NULL' if nullable == 'YES' else ' NOT NULL'
                 if default is not None:
-                    definition += ' DEFAULT ' + conn.escape(default)
+                    # MySQL rejects decimal defaults (for example 0.00) on
+                    # integer columns when widening legacy fare fields.
+                    normalized = default
+                    if sql_type.upper().startswith(('BIGINT', 'INT')):
+                        try:
+                            normalized = str(int(float(default)))
+                        except (TypeError, ValueError):
+                            normalized = default
+                    definition += ' DEFAULT ' + conn.escape(normalized)
                 elif nullable == 'YES':
                     definition += ' DEFAULT NULL'
                 if comment:
