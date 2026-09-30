@@ -5,14 +5,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def required_setting(name):
+    value = os.getenv(name)
+    if not value or not value.strip():
+        raise RuntimeError(f'{name} must be configured')
+    return value
+
+
 class Config:
-    SECRET_KEY = os.getenv('SECRET_KEY', 'negoride-default-secret-key-2026')
-    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'negoride-default-jwt-key-2026')
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(seconds=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 315360000)))
+    SECRET_KEY = required_setting('SECRET_KEY')
+    JWT_SECRET_KEY = required_setting('JWT_SECRET_KEY')
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(seconds=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 2592000)))
 
     # MySQL via MAMP socket (Unix) or TCP/IP (Windows/TCP)
-    DB_USER = os.getenv('DB_USERNAME', 'root')
-    DB_PASS = os.getenv('DB_PASSWORD', 'root')
+    DB_USER = required_setting('DB_USERNAME')
+    DB_PASS = required_setting('DB_PASSWORD')
     DB_HOST = os.getenv('DB_HOST', '127.0.0.1')
     DB_PORT = os.getenv('DB_PORT', '3306')
     DB_NAME = os.getenv('DB_DATABASE', 'negoride')

@@ -197,6 +197,6 @@ if __name__ == '__main__':
         app,
         host=Config.SERVER_HOST,
         port=port,
-        debug=os.getenv('FLASK_DEBUG', 'true').lower() == 'true',
+        debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
         allow_unsafe_werkzeug=True,
     )
