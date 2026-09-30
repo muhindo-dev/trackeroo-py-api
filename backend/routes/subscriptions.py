@@ -68,11 +68,38 @@ def status(user):
     latest = Subscription.query.filter_by(driver_id=user.id).order_by(
         Subscription.created_at.desc()
     ).first()
+    grace_offer_state = None
+    if is_driver and active is None and policy is None:
+        # Tell the app why a configured offer is unavailable, without
+        # presenting an exhausted offer as a free package to claim.
+        now = datetime.utcnow()
+        window_policies = DriverGracePolicy.query.filter(
+            DriverGracePolicy.is_active == 1,
+            DriverGracePolicy.start_at <= now,
+            DriverGracePolicy.end_at >= now,
+        ).order_by(DriverGracePolicy.created_at.desc(), DriverGracePolicy.id.desc()).all()
+        for candidate in window_policies:
+            if registered_as_driver:
+                created_at = getattr(user, 'created_at', None)
+                eligible_audience = bool(created_at and (
+                    (candidate.start_at <= created_at <= candidate.end_at and candidate.apply_to_new_drivers)
+                    or (created_at < candidate.start_at and candidate.apply_to_existing)
+                ))
+            else:
+                eligible_audience = bool(candidate.apply_to_existing)
+            if not eligible_audience:
+                continue
+            if Subscription.query.filter_by(driver_id=user.id, grace_policy_id=candidate.id).first():
+                break  # Already redeemed this offer; never advertise it again.
+            if candidate.max_redemptions is not None and candidate.redemption_count >= candidate.max_redemptions:
+                grace_offer_state = 'fully_redeemed'
+            break
     return success_response("Subscription status", {
         'is_subscribed': active is not None,
         'active': active.to_dict() if active else None,
         'latest': latest.to_dict() if latest else None,
         'grace_offer': offer_dict(policy),
+        'grace_offer_state': grace_offer_state,
     })
 
 

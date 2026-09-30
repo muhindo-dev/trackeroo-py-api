@@ -123,6 +123,22 @@ class GraceStatusAssignmentTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()['data']['active']['is_grace'])
 
+    def test_exhausted_offer_is_explained_without_promising_a_grant(self):
+        policy = self.add_policy(existing=True)
+        policy.max_redemptions = 2
+        policy.redemption_count = 2
+        db.session.commit()
+        self.add_driver(account_type='Driver', created_at=self.now - timedelta(days=30))
+
+        response = self.status()
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()['data']
+        self.assertFalse(data['is_subscribed'])
+        self.assertIsNone(data['grace_offer'])
+        self.assertEqual(data['grace_offer_state'], 'fully_redeemed')
+        self.assertEqual(Subscription.query.count(), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
