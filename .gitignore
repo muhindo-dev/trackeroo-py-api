@@ -11,6 +11,8 @@ node_modules/
 .DS_Store
 backend/uploads/profiles/*
 backend/uploads/documents/*
+backend/uploads/images/*
+backups/
 !backend/uploads/profiles/.gitkeep
 !backend/uploads/documents/.gitkeep
 vps-credentials.txt

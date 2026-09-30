@@ -31,8 +31,16 @@ if [ -f .env ]; then
     && echo "    DB backed up." || echo "    (DB backup skipped)"
 fi
 
-echo "==> Pulling latest code…"
-git fetch origin main && git reset --hard origin/main
+echo "==> Pulling latest Truckfully code…"
+BRANCH=${BRANCH:-truckeroo}
+if [ "$(git branch --show-current)" != "$BRANCH" ]; then
+  echo "ERROR: expected branch '$BRANCH'; refusing to switch the live checkout."; exit 1
+fi
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "ERROR: tracked local changes exist; refusing to overwrite them."; exit 1
+fi
+git fetch origin "$BRANCH"
+git merge --ff-only "origin/$BRANCH"
 
 echo "==> Selecting python…"
 PY=python3
@@ -45,9 +53,12 @@ if [ -f .env ]; then
   grep -q '^FLW_CURRENCY=' .env && sed -i 's/^FLW_CURRENCY=.*/FLW_CURRENCY=NGN/' .env || echo 'FLW_CURRENCY=NGN' >> .env
 fi
 
-echo "==> Running migrations + seed…"
+echo "==> Running pending migrations…"
 $PY migrate.py migrate
-$PY migrate.py seed
+if [ "${SEED:-0}" = "1" ]; then
+  echo "==> Running seed (explicitly requested)…"
+  $PY migrate.py seed
+fi
 
 echo "==> Restarting the app service…"
 # HARDCODED, like APP above and for the same reason. The old lookup grepped
