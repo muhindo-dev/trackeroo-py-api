@@ -112,6 +112,10 @@ export const adminAPI = {
   subscriptionActivate: (id, data) => api.post(`/admin/subscriptions/${id}/activate`, data || {}),
   subscriptionCancel:   (id, data) => api.post(`/admin/subscriptions/${id}/cancel`, data || {}),
   subscriptionGrant:    (data) => api.post('/admin/subscriptions/grant', data),
+  gracePolicies:        () => api.get('/admin/subscription-grace-policies'),
+  gracePolicyCreate:    (data) => api.post('/admin/subscription-grace-policies', data),
+  gracePolicyUpdate:    (id, data) => api.put(`/admin/subscription-grace-policies/${id}`, data),
+  gracePolicyApplyExisting: (id) => api.post(`/admin/subscription-grace-policies/${id}/apply-existing`),
 };
 
 export default api;
