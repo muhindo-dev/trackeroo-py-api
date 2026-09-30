@@ -44,8 +44,8 @@ def up(conn):
                         except (TypeError, ValueError):
                             normalized = default
                     definition += ' DEFAULT ' + conn.escape(normalized)
-                elif nullable == 'YES':
-                    definition += ' DEFAULT NULL'
+                # Omit an explicit DEFAULT NULL for nullable legacy columns;
+                # MariaDB/MySQL variants can reject it while changing types.
                 if comment:
                     definition += ' COMMENT ' + conn.escape(comment)
                 changes.append(definition)
