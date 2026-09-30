@@ -79,6 +79,31 @@ function GrantDrawer({ plans, onClose, onSaved }) {
   );
 }
 
+function GraceOfferDrawer({ plans, onClose, onSaved }) {
+  const [form, setForm] = useState({ name: 'New driver grace offer', plan_id: plans[0]?.id || '', start_at: '', end_at: '', duration_days: 7, apply_to_new_drivers: true, apply_to_existing: false });
+  const [saving, setSaving] = useState(false); const [err, setErr] = useState('');
+  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  const save = async () => {
+    if (!form.plan_id || !form.start_at || !form.end_at) { setErr('Package, start date, and end date are required'); return; }
+    setSaving(true); setErr('');
+    try { await adminAPI.gracePolicyCreate(form); onSaved(); } catch (e) { setErr(e?.response?.data?.message || 'Unable to save offer'); } finally { setSaving(false); }
+  };
+  return <div className="drawer-overlay" onClick={onClose}><div className="drawer-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+    <div className="drawer-head"><h2>New Driver Grace Offer</h2><button className="drawer-close" onClick={onClose}><FiX /></button></div>
+    <div className="drawer-body"><p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Drivers who register during this window receive the selected package automatically without payment.</p>
+      <div className="form-grid" style={{ gridTemplateColumns: '1fr', gap: 10 }}>
+        <input className="d-input" placeholder="Offer name" value={form.name} onChange={(e) => set('name', e.target.value)} />
+        <select className="d-input" value={form.plan_id} onChange={(e) => set('plan_id', e.target.value)}>{plans.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.period})</option>)}</select>
+        <label>Starts <input className="d-input" type="datetime-local" value={form.start_at} onChange={(e) => set('start_at', e.target.value)} /></label>
+        <label>Ends <input className="d-input" type="datetime-local" value={form.end_at} onChange={(e) => set('end_at', e.target.value)} /></label>
+        <label>Grace duration (days) <input className="d-input" type="number" min="1" value={form.duration_days} onChange={(e) => set('duration_days', e.target.value)} /></label>
+        <label><input type="checkbox" checked={form.apply_to_new_drivers} onChange={(e) => set('apply_to_new_drivers', e.target.checked)} /> New driver signups</label>
+        <label><input type="checkbox" checked={form.apply_to_existing} onChange={(e) => set('apply_to_existing', e.target.checked)} /> Existing pending drivers</label>
+      </div>{err && <p style={{ color: 'var(--error)', fontSize: 13 }}>{err}</p>}
+    </div><div className="drawer-footer"><button className="btn btn-sm btn-accent" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save Grace Offer'}</button><button className="btn btn-sm" onClick={onClose}>Cancel</button></div>
+  </div></div>;
+}
+
 export default function SubscriptionsPage() {
   const [rows, setRows] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -89,6 +114,8 @@ export default function SubscriptionsPage() {
   const [busy, setBusy] = useState({});
   const [confirm, setConfirm] = useState(null);
   const [granting, setGranting] = useState(false);
+  const [gracePolicies, setGracePolicies] = useState([]);
+  const [creatingGrace, setCreatingGrace] = useState(false);
 
   const load = () => {
     setLoading(true); setError(null);
@@ -106,6 +133,7 @@ export default function SubscriptionsPage() {
   useEffect(() => {
     // load plans for the grant form
     fetch('/api/subscription-plans').then((r) => r.json()).then((d) => setPlans(d.data || [])).catch(() => {});
+    adminAPI.gracePolicies().then(({ data }) => setGracePolicies(data.data || [])).catch(() => {});
   }, []);
 
   const act = async (id, fn) => {
@@ -118,6 +146,7 @@ export default function SubscriptionsPage() {
   return (
     <div className="page-subscriptions">
       {granting && <GrantDrawer plans={plans} onClose={() => setGranting(false)} onSaved={() => { setGranting(false); load(); }} />}
+      {creatingGrace && <GraceOfferDrawer plans={plans} onClose={() => setCreatingGrace(false)} onSaved={() => { setCreatingGrace(false); adminAPI.gracePolicies().then(({ data }) => setGracePolicies(data.data || [])); }} />}
       {confirm && (
         <Confirm
           message={confirm.message}
@@ -140,6 +169,10 @@ export default function SubscriptionsPage() {
         </select>
         <button className="btn btn-sm btn-accent" onClick={() => setGranting(true)}><FiPlus /> Grant Subscription</button>
       </div>
+      <section className="content-card" style={{ marginBottom: 18 }}>
+        <div className="section-header"><div><h2>Driver Grace Offers</h2><p className="muted">Automatic package access for eligible driver registrations.</p></div><button className="btn btn-sm btn-accent" onClick={() => setCreatingGrace(true)}><FiPlus /> Create offer</button></div>
+        {gracePolicies.length ? <div className="table-wrap"><table><thead><tr><th>Offer</th><th>Package</th><th>Window</th><th>Duration</th><th>Audience</th><th>Status</th></tr></thead><tbody>{gracePolicies.map((p) => <tr key={p.id}><td><b>{p.name}</b></td><td>{p.plan?.name || '—'}</td><td>{new Date(p.start_at).toLocaleDateString()} – {new Date(p.end_at).toLocaleDateString()}</td><td>{p.duration_days} days</td><td>{[p.apply_to_new_drivers && 'New drivers', p.apply_to_existing && 'Existing pending'].filter(Boolean).join(', ') || 'None'}</td><td><span className="status-pill">{p.is_active ? 'Active' : 'Inactive'}</span></td></tr>)}</tbody></table></div> : <p className="empty-state">No grace offers configured yet.</p>}
+      </section>
 
       {loading ? <div className="page-loader">Loading…</div> : error ? (
         <div className="page-loader"><span>{error}</span><button className="btn btn-sm" onClick={load} style={{ marginLeft: 8 }}>Retry</button></div>
