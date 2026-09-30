@@ -60,8 +60,13 @@ def grace_policies(user):
 def create_grace_policy(user):
     data = request.get_json(silent=True) or {}
     try:
-        from dateutil.parser import parse
-        start_at, end_at = parse(data['start_at']), parse(data['end_at'])
+        def parse_datetime(value):
+            # Accept HTML datetime-local values and ISO-8601 payloads without
+            # adding a runtime dependency to the production image.
+            value = str(value).strip().replace('Z', '+00:00')
+            parsed = datetime.fromisoformat(value)
+            return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+        start_at, end_at = parse_datetime(data['start_at']), parse_datetime(data['end_at'])
         if end_at <= start_at: raise ValueError('end_at must be after start_at')
         plan = db.session.get(SubscriptionPlan, int(data['plan_id']))
         if not plan: raise ValueError('Invalid subscription plan')
