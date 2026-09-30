@@ -84,10 +84,6 @@ const SERVICES = [
   { key: 'car',        label: 'Special Hire / Private Rides', icon: '🚗' },
   { key: 'delivery',   label: 'Courier / Delivery',           icon: '📦' },
   { key: 'boda',       label: 'Boda Boda / Motorcycle',       icon: '🏍️' },
-  { key: 'ambulance',  label: 'Ambulance',                    icon: '🚑' },
-  { key: 'police',     label: 'Police',                       icon: '🚔' },
-  { key: 'breakdown',  label: 'Breakdown Recovery',           icon: '🔧' },
-  { key: 'firebrugade',label: 'Fire Brigade',                 icon: '🚒' },
 ];
 
 function DriverApplicationDrawer({ user: initialUser, onClose, onApproved, onRejected }) {
@@ -95,10 +91,9 @@ function DriverApplicationDrawer({ user: initialUser, onClose, onApproved, onRej
   const [services, setServices] = useState(() => {
     const s = {};
     SERVICES.forEach(({ key }) => {
-      // Pre-check applied services; default car+delivery if none applied
+      // Show only currently offered services that this driver requested.
       s[key] = initialUser[`is_${key}`] === 'Yes';
     });
-    if (!Object.values(s).some(Boolean)) s['car'] = true; // sensible default
     return s;
   });
   const [loading, setLoading] = useState(false);
@@ -120,14 +115,14 @@ function DriverApplicationDrawer({ user: initialUser, onClose, onApproved, onRej
     try {
       const { data } = await adminAPI.approveDriver(user.id, { services: selected });
       if (data.code === 1) {
-        setMsg({ type: 'success', text: `Driver approved! Services: ${selected.join(', ')}` });
+        setMsg({ type: 'success', text: `Driver approved for ${SERVICES.filter(({ key }) => selected.includes(key)).map(({ label }) => label).join(', ')}.` });
         setUser(data.data);
         if (onApproved) onApproved(data.data);
       } else {
         setMsg({ type: 'error', text: data.message || 'Approval failed' });
       }
-    } catch {
-      setMsg({ type: 'error', text: 'Network error' });
+    } catch (error) {
+      setMsg({ type: 'error', text: error?.response?.data?.message || 'Could not approve this driver. Please try again.' });
     } finally {
       setLoading(false);
     }
@@ -316,6 +311,9 @@ function DriverApplicationDrawer({ user: initialUser, onClose, onApproved, onRej
                   );
                 })}
               </div>
+              {!Object.values(services).some(Boolean) && (
+                <p style={{ fontSize: 12, color: '#b45309', marginTop: 10 }}>Select at least one offered service before approving this driver.</p>
+              )}
             </section>
           )}
 
@@ -474,14 +472,6 @@ const FIELD_GROUPS = [
       { key: 'is_delivery_approved', label: 'Del. Approved', type: 'yesno' },
       { key: 'is_boda',      label: 'Boda',       type: 'yesno' },
       { key: 'is_boda_approved',  label: 'Boda Approved', type: 'yesno' },
-      { key: 'is_ambulance', label: 'Ambulance',  type: 'yesno' },
-      { key: 'is_ambulance_approved', label: 'Amb. Approved', type: 'yesno' },
-      { key: 'is_police',    label: 'Police',     type: 'yesno' },
-      { key: 'is_police_approved', label: 'Police Approved', type: 'yesno' },
-      { key: 'is_breakdown', label: 'Breakdown',  type: 'yesno' },
-      { key: 'is_breakdown_approved', label: 'Bkd. Approved', type: 'yesno' },
-      { key: 'is_firebrugade', label: 'Fire',     type: 'yesno' },
-      { key: 'is_firebrugade_approved', label: 'Fire Approved', type: 'yesno' },
     ],
   },
 ];

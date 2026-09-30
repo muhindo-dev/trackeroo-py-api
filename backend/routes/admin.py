@@ -281,11 +281,8 @@ def users_update(user, user_id):
         'driving_license_number', 'nin',
         'driving_license_issue_date', 'driving_license_validity',
         'driving_license_issue_authority',
-        'is_car', 'is_boda', 'is_ambulance', 'is_police', 'is_delivery',
-        'is_breakdown', 'is_firebrugade',
-        'is_car_approved', 'is_boda_approved', 'is_ambulance_approved',
-        'is_police_approved', 'is_delivery_approved', 'is_breakdown_approved',
-        'is_firebrugade_approved',
+        'is_car', 'is_boda', 'is_delivery',
+        'is_car_approved', 'is_boda_approved', 'is_delivery_approved',
     ]
     for field in updatable:
         if field in data and data[field] is not None:
@@ -399,33 +396,31 @@ def approve_driver(user, user_id):
     if not target:
         return error_response("User not found", status_code=404)
 
+    offered_services = ('car', 'delivery', 'boda')
+    retired_services = ('ambulance', 'police', 'breakdown', 'firebrugade')
+    body = request.get_json(silent=True) or {}
+    requested = body.get('services')
+    if requested is None:
+        # Legacy quick-approve calls have no body. Use only offered services.
+        selected = [svc for svc in offered_services if getattr(target, f'is_{svc}') == 'Yes']
+    elif not isinstance(requested, list) or any(
+        not isinstance(svc, str) or svc not in offered_services for svc in requested
+    ):
+        return error_response('Choose only currently offered driver services', status_code=422)
+    else:
+        selected = list(dict.fromkeys(requested))
+    if not selected:
+        return error_response('Select at least one offered service', status_code=422)
+
     target.user_type = 'Driver'
     target.status = 1
-
-    body = request.get_json(silent=True) or {}
-    all_svcs = ['car', 'boda', 'ambulance', 'police', 'delivery', 'breakdown', 'firebrugade']
-
-    # Admin may explicitly pass which services to approve
-    requested = body.get('services') or []
-    if requested:
-        # Admin chose specific services — mark those as Yes + Approved
-        for svc in all_svcs:
-            if svc in requested:
-                setattr(target, f'is_{svc}', 'Yes')
-                setattr(target, f'is_{svc}_approved', 'Yes')
-            else:
-                setattr(target, f'is_{svc}_approved', 'No')
-    else:
-        # Auto-approve whatever the driver applied for
-        any_approved = False
-        for svc in all_svcs:
-            if getattr(target, f'is_{svc}') == 'Yes':
-                setattr(target, f'is_{svc}_approved', 'Yes')
-                any_approved = True
-        # Fallback: if driver never filled services, default to car
-        if not any_approved:
-            target.is_car = 'Yes'
-            target.is_car_approved = 'Yes'
+    for svc in offered_services:
+        if svc in selected:
+            setattr(target, f'is_{svc}', 'Yes')
+        setattr(target, f'is_{svc}_approved', 'Yes' if svc in selected else 'No')
+    # Retired approvals must not survive a fresh review of this driver.
+    for svc in retired_services:
+        setattr(target, f'is_{svc}_approved', 'No')
 
     target.updated_at = datetime.utcnow()
     db.session.commit()
