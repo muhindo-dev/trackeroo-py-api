@@ -83,7 +83,7 @@ function Avatar({ name, avatar }) {
 const SERVICES = [
   { key: 'car',        label: 'Special Hire / Private Rides', icon: '🚗' },
   { key: 'delivery',   label: 'Courier / Delivery',           icon: '📦' },
-  { key: 'boda',       label: 'Boda Boda / Motorcycle',       icon: '🏍️' },
+  { key: 'boda',       label: 'Okada / Motorcycle',       icon: '🏍️' },
 ];
 
 function DriverApplicationDrawer({ user: initialUser, onClose, onApproved, onRejected }) {
