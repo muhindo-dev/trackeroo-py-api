@@ -620,3 +620,61 @@ a:hover { color: var(--accent-hover); }
 
 /* ── Unassigned warning ── */
 .unassigned { color: var(--warning); font-style: italic; font-size: 12px; }
+
+/* Driver grace offers */
+.grace-page-toolbar { align-items: center; }
+.grace-page-toolbar h1 { margin: 2px 0 4px; }
+.grace-page-toolbar p { margin: 0; }
+.grace-eyebrow { color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: 1.2px; }
+.grace-toolbar-actions { display: flex; gap: 8px; }
+.grace-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+.grace-stats .content-card { display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; }
+.grace-stats span { color: var(--text-secondary); font-size: 12px; }
+.grace-stats b { font-size: 24px; }
+.grace-table-card { padding: 0; overflow: hidden; }
+.grace-table-heading { padding: 18px 20px; border-bottom: 1px solid var(--grey-10); }
+.grace-table-heading h2 { margin: 0 0 4px; font-size: 16px; }
+.grace-table-heading p { margin: 0; font-size: 12px; }
+.grace-offer-name { display: flex; flex-direction: column; gap: 3px; }
+.grace-offer-name small, .grace-date-end { display: block; color: var(--text-tertiary); font-size: 11px; margin-top: 3px; }
+.grace-status { display: inline-flex; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; background: var(--grey-5); color: var(--text-secondary); white-space: nowrap; }
+.grace-status-live { color: #19713a; background: #e5f5eb; }
+.grace-status-scheduled { color: #805e00; background: #fff4d6; }
+.grace-status-disabled, .grace-status-ended, .grace-status-fully-redeemed { color: #6b7280; background: #f0f1f3; }
+.grace-notice, .grace-form-error { display: flex; align-items: center; gap: 9px; padding: 12px 14px; margin: 0 0 14px; border-radius: 6px; font-size: 13px; }
+.grace-notice { color: #196b37; background: #e7f6ec; }
+.grace-form-error { color: #a32626; background: #fff0f0; }
+.grace-form-error .btn { margin-left: auto; }
+.grace-modal-overlay { padding: 24px; overflow-y: auto; }
+.grace-modal { max-width: 760px; width: min(760px, 100%); padding: 0; border: 1px solid var(--grey-20); border-radius: 10px; overflow: hidden; box-shadow: 0 20px 60px rgba(20, 26, 35, .25); }
+.grace-modal-head { display: flex; align-items: center; gap: 14px; padding: 20px 24px; border-bottom: 1px solid var(--grey-10); }
+.grace-modal-head h2 { margin: 0 0 4px; font-size: 18px; }
+.grace-modal-head p { margin: 0; color: var(--text-secondary); font-size: 12px; }
+.grace-modal-head .drawer-close { margin-left: auto; }
+.grace-modal-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 14%, white); color: var(--accent); font-size: 20px; }
+.grace-modal-body { max-height: min(70vh, 720px); overflow-y: auto; padding: 20px 24px; }
+.grace-form-section { margin-bottom: 22px; }
+.grace-form-section:last-of-type { margin-bottom: 12px; }
+.grace-form-section h3 { margin: 0 0 12px; font-size: 13px; font-weight: 750; }
+.grace-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grace-span-2 { grid-column: 1 / -1; }
+.grace-form-grid .form-group span { font-size: 11px; font-weight: 650; color: var(--text-secondary); }
+.grace-form-grid .d-input { min-height: 38px; border-radius: 5px; }
+.grace-audience-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.grace-choice { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--grey-20); border-radius: 6px; cursor: pointer; }
+.grace-choice.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, white); }
+.grace-choice input { margin-top: 2px; accent-color: var(--accent); }
+.grace-choice span { display: flex; flex-direction: column; gap: 4px; }
+.grace-choice b { font-size: 12px; }
+.grace-choice small { color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+.grace-edit-note { padding: 10px 12px; background: var(--bg-secondary); color: var(--text-secondary); border-radius: 5px; font-size: 11px !important; }
+.grace-modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 24px; border-top: 1px solid var(--grey-10); background: var(--bg-card); }
+@media (max-width: 700px) {
+  .grace-stats { grid-template-columns: 1fr; gap: 8px; }
+  .grace-toolbar-actions { margin-top: 12px; }
+  .grace-page-toolbar { align-items: flex-start; flex-direction: column; }
+  .grace-form-grid, .grace-audience-grid { grid-template-columns: 1fr; }
+  .grace-span-2 { grid-column: auto; }
+  .grace-modal-overlay { padding: 10px; align-items: flex-start; }
+  .grace-modal-head, .grace-modal-body { padding-left: 16px; padding-right: 16px; }
+}

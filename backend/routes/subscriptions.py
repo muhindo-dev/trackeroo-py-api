@@ -76,8 +76,12 @@ def create_grace_policy(user):
             apply_to_existing=1 if data.get('apply_to_existing', False) else 0,
             max_redemptions=int(data['max_redemptions']) if data.get('max_redemptions') else None,
             is_active=1 if data.get('is_active', True) else 0, notes=data.get('notes'), created_by=user.id)
-        db.session.add(p); db.session.commit()
-        return success_response("Grace policy created", p.to_dict(), status_code=201)
+        db.session.add(p)
+        db.session.flush()
+        applied = _apply_policy_to_existing(p) if p.apply_to_existing else 0
+        db.session.commit()
+        result = p.to_dict(); result['existing_drivers_applied'] = applied
+        return success_response("Grace policy created", result, status_code=201)
     except (KeyError, TypeError, ValueError) as exc:
         db.session.rollback(); return error_response(str(exc), 422)
 
@@ -91,20 +95,57 @@ def update_grace_policy(user, policy_id):
     try:
         if 'plan_id' in data:
             plan = db.session.get(SubscriptionPlan, int(data['plan_id']))
-            if not plan: return error_response('Invalid subscription plan', 422)
-            p.plan_id = plan.id
+            if not plan:
+                db.session.rollback(); return error_response('Invalid subscription plan', 422)
+            p.plan = plan
         if 'start_at' in data: p.start_at = datetime.fromisoformat(str(data['start_at']).replace('Z', '+00:00')).replace(tzinfo=None)
         if 'end_at' in data: p.end_at = datetime.fromisoformat(str(data['end_at']).replace('Z', '+00:00')).replace(tzinfo=None)
-        if p.end_at <= p.start_at: return error_response('End date must be after start date', 422)
+        if p.end_at <= p.start_at:
+            db.session.rollback(); return error_response('End date must be after start date', 422)
         if 'max_redemptions' in data: p.max_redemptions = int(data['max_redemptions']) if data['max_redemptions'] else None
+        if 'duration_days' in data:
+            p.duration_days = int(data['duration_days'])
+            if p.duration_days < 1: raise ValueError('duration_days must be at least 1')
+        if p.max_redemptions is not None and p.max_redemptions < 1:
+            raise ValueError('max_redemptions must be at least 1')
+        if 'name' in data and not str(data['name']).strip():
+            raise ValueError('name is required')
     except (TypeError, ValueError) as exc:
-        return error_response(f'Invalid policy value: {exc}', 422)
+        db.session.rollback(); return error_response(f'Invalid policy value: {exc}', 422)
     for key in ('name', 'notes'):
         if key in data: setattr(p, key, data[key])
     for key in ('apply_to_new_drivers', 'apply_to_existing', 'is_active'):
         if key in data: setattr(p, key, 1 if data[key] else 0)
-    if 'duration_days' in data: p.duration_days = max(int(data['duration_days']), 1)
-    db.session.commit(); return success_response("Grace policy updated", p.to_dict())
+    if 'name' in data: p.name = str(data['name']).strip()
+    if 'notes' in data: p.notes = data['notes']
+    db.session.flush()
+    if any(k in data for k in ('plan_id', 'duration_days')):
+        now = datetime.utcnow()
+        for grant in Subscription.query.filter_by(grace_policy_id=p.id, is_grace=1, status='active').all():
+            if grant.end_at and grant.end_at >= now:
+                grant.plan_id = p.plan_id
+                grant.amount = 0
+                grant.currency = p.plan.currency if p.plan else grant.currency
+                if grant.start_at:
+                    from datetime import timedelta
+                    grant.end_at = grant.start_at + timedelta(days=p.duration_days)
+                if grant.end_at < now: grant.status = 'expired'
+    applied = _apply_policy_to_existing(p) if p.apply_to_existing and p.is_active else 0
+    db.session.commit()
+    result = p.to_dict(); result['existing_drivers_applied'] = applied
+    return success_response("Grace policy updated", result)
+
+
+def _apply_policy_to_existing(policy):
+    now = datetime.utcnow()
+    if not (policy.is_active and policy.apply_to_existing and policy.start_at <= now <= policy.end_at):
+        return 0
+    from backend.models.user import AdminUser
+    count = 0
+    for driver in AdminUser.query.filter_by(user_type='Pending Driver').all():
+        if policy.max_redemptions is not None and policy.redemption_count >= policy.max_redemptions: break
+        if apply_grace(driver, existing=True, policy=policy): count += 1
+    return count
 
 
 @subscriptions_bp.route('/api/admin/subscription-grace-policies/<int:policy_id>/apply-existing', methods=['POST'])
@@ -112,10 +153,7 @@ def update_grace_policy(user, policy_id):
 def apply_existing_grace(user, policy_id):
     p = db.session.get(DriverGracePolicy, policy_id)
     if not p: return error_response('Grace policy not found', 404)
-    from backend.models.user import AdminUser
-    count = 0
-    for driver in AdminUser.query.filter_by(user_type='Pending Driver').all():
-        if apply_grace(driver, existing=True): count += 1
+    count = _apply_policy_to_existing(p)
     db.session.commit(); return success_response("Grace offer applied to pending drivers", {'applied': count})
 
 

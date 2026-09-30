@@ -23,10 +23,10 @@ def offer_dict(policy):
             'duration_days': policy.duration_days, 'ends_at': policy.end_at.isoformat()}
 
 
-def apply_grace(driver, existing=False):
-    policy = active_policy(existing=existing)
-    if not policy or Subscription.query.filter_by(driver_id=driver.id, is_grace=1).filter(
-        Subscription.status == 'active', Subscription.end_at >= datetime.utcnow()).first():
+def apply_grace(driver, existing=False, policy=None):
+    policy = policy or active_policy(existing=existing)
+    # A driver can redeem one policy only once, including after expiry.
+    if not policy or Subscription.query.filter_by(driver_id=driver.id, grace_policy_id=policy.id).first():
         return None
     if policy.max_redemptions is not None and policy.redemption_count >= policy.max_redemptions:
         return None
