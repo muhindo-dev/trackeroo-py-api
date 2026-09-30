@@ -139,6 +139,43 @@ class GraceStatusAssignmentTests(unittest.TestCase):
         self.assertEqual(data['grace_offer_state'], 'fully_redeemed')
         self.assertEqual(Subscription.query.count(), 0)
 
+    def test_removing_shared_cap_automatically_grants_untouched_driver_once(self):
+        policy = self.add_policy(existing=True)
+        policy.max_redemptions = 2
+        policy.redemption_count = 2
+        driver = self.add_driver()
+        admin = AdminUser(id=2, username='admin', password='x', user_type='Admin')
+        db.session.add(admin)
+        db.session.commit()
+        self.assertFalse(self.status().get_json()['data']['is_subscribed'])
+        token = create_access_token(identity='2')
+        response = self.client.put('/api/admin/subscription-grace-policies/1',
+            json={'max_redemptions': None}, headers={'Authorization': 'Bearer ' + token})
+        self.assertEqual(response.status_code, 200, response.get_json())
+        self.assertIsNone(response.get_json()['data']['max_redemptions'])
+        data = self.status().get_json()['data']
+        self.assertTrue(data['active']['is_grace'])
+        self.assertEqual(data['active']['amount'], 0)
+        self.status()
+        self.assertEqual(Subscription.query.filter_by(driver_id=driver.id).count(), 1)
+        self.assertEqual(db.session.get(DriverGracePolicy, policy.id).redemption_count, 3)
+        grant = Subscription.query.filter_by(driver_id=driver.id).one()
+        grant.end_at = self.now - timedelta(seconds=1)
+        db.session.commit()
+        self.assertFalse(self.status().get_json()['data']['is_subscribed'])
+        self.assertEqual(Subscription.query.filter_by(driver_id=driver.id).count(), 1)
+
+    def test_offer_save_does_not_replace_active_subscription(self):
+        from backend.services.grace_period_service import apply_grace
+        policy = self.add_policy(existing=True)
+        driver = self.add_driver()
+        db.session.add(Subscription(driver_id=driver.id, plan_id=self.plan.id,
+            status='active', amount=2500, start_at=self.now,
+            end_at=self.now + timedelta(days=7), tx_ref='paid-existing'))
+        db.session.commit()
+        self.assertIsNone(apply_grace(driver, existing=True, policy=policy))
+        self.assertEqual(Subscription.query.count(), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

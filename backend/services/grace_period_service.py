@@ -28,13 +28,21 @@ def apply_grace(driver, existing=False, policy=None):
     if policy:
         # Serialize redemptions against this policy so its cap cannot be
         # exceeded by two signups arriving at the same time.
-        policy = DriverGracePolicy.query.filter_by(id=policy.id).with_for_update().first()
+        policy = DriverGracePolicy.query.filter_by(id=policy.id).populate_existing().with_for_update().first()
     # A driver can redeem one policy only once, including after expiry.
     if not policy or Subscription.query.filter_by(driver_id=driver.id, grace_policy_id=policy.id).first():
         return None
     if policy.max_redemptions is not None and policy.redemption_count >= policy.max_redemptions:
         return None
     now = datetime.utcnow()
+    # Recheck after locking: an admin may have disabled or edited the offer.
+    if not policy.is_active or not policy.start_at <= now <= policy.end_at:
+        return None
+    if not (policy.apply_to_existing if existing else policy.apply_to_new_drivers):
+        return None
+    # Saving an offer must never replace a driver's current paid/free access.
+    if Subscription.active_for_driver(driver.id) is not None:
+        return None
     sub = Subscription(driver_id=driver.id, plan_id=policy.plan_id, amount=0,
                        currency=policy.plan.currency if policy.plan else 'NGN', status='active',
                        start_at=now, end_at=now + timedelta(days=max(int(policy.duration_days), 1)),
