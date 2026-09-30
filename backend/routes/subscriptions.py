@@ -15,6 +15,7 @@ from backend.models.grace_policy import DriverGracePolicy
 from backend.services.grace_period_service import active_policy, offer_dict, apply_grace
 from backend.utils.auth import jwt_required_with_user, admin_required
 from backend.utils.response import success_response, error_response
+from backend.utils.cron_auth import cron_auth_error
 from backend.services.flutterwave_service import (
     FlutterwaveService, FlutterwaveError, get_flutterwave,
 )
@@ -351,15 +352,12 @@ def expire_subscriptions():
     Intended to be called by a scheduler/cron. Protected by a shared secret
     (SUBSCRIPTION_CRON_SECRET) so it can run unauthenticated from a cron job.
     """
-    import os
     from datetime import datetime
     from backend.models.user import AdminUser
 
-    secret = os.getenv('SUBSCRIPTION_CRON_SECRET', '')
-    provided = request.headers.get('X-Cron-Secret') or (
-        request.get_json(silent=True) or {}).get('secret')
-    if secret and provided != secret:
-        return error_response("Forbidden", status_code=403)
+    auth_error = cron_auth_error()
+    if auth_error is not None:
+        return auth_error
 
     now = datetime.utcnow()
     lapsed = Subscription.query.filter(

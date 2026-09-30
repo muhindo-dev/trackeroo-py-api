@@ -1,0 +1,103 @@
+"""Isolated regression tests for the cleanup scheduler; no live DB is used."""
+
+import os
+import hashlib
+import hmac
+import unittest
+from datetime import datetime, timedelta
+from unittest.mock import patch
+
+from flask import Flask
+from sqlalchemy import BigInteger
+from sqlalchemy.ext.compiler import compiles
+
+from backend.models import db
+from backend.models.negotiation import Negotiation
+from backend.models.user import AdminUser
+from backend.routes.cron import cron_bp
+from backend.routes.rides import rides_bp
+from backend.routes.subscriptions import subscriptions_bp
+from backend.services.flutterwave_service import FlutterwaveService
+
+
+@compiles(BigInteger, 'sqlite')
+def sqlite_integer(element, compiler, **kw):
+    return 'INTEGER'
+
+
+class CleanupCronTests(unittest.TestCase):
+    def setUp(self):
+        self.app = Flask(__name__)
+        self.app.config.update(SQLALCHEMY_DATABASE_URI='sqlite://', TESTING=True)
+        db.init_app(self.app)
+        self.app.register_blueprint(cron_bp)
+        self.app.register_blueprint(rides_bp)
+        self.app.register_blueprint(subscriptions_bp)
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        db.create_all()
+        old = datetime.utcnow() - timedelta(minutes=40)
+        db.session.add_all([
+            AdminUser(id=1, username='driver', password='x',
+                      user_type='Driver', ready_for_trip='Yes',
+                      location_updated_at=old),
+            Negotiation(id=10, customer_id=2, driver_id=1,
+                        status='Active', is_active='Yes', updated_at=old),
+        ])
+        db.session.commit()
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        db.session.remove()
+        db.drop_all()
+        self.ctx.pop()
+
+    def test_get_and_unconfigured_requests_cannot_run_cleanup(self):
+        with patch.dict(os.environ, {'SUBSCRIPTION_CRON_SECRET': ''}):
+            self.assertEqual(self.client.get('/api/cron/cleanup').status_code, 405)
+            self.assertEqual(self.client.post('/api/cron/cleanup').status_code, 503)
+        self.assertEqual(db.session.get(Negotiation, 10).status, 'Active')
+        self.assertEqual(db.session.get(AdminUser, 1).ready_for_trip, 'Yes')
+
+    def test_wrong_secret_does_not_change_state(self):
+        with patch.dict(os.environ, {'SUBSCRIPTION_CRON_SECRET': 'correct'}):
+            resp = self.client.post('/api/cron/cleanup',
+                                    headers={'X-Cron-Secret': 'wrong'})
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(db.session.get(Negotiation, 10).status, 'Active')
+
+    def test_other_scheduler_routes_also_fail_closed(self):
+        paths = ['/api/rides/dispatch-due', '/api/subscriptions/expire']
+        for path in paths:
+            with patch.dict(os.environ, {'SUBSCRIPTION_CRON_SECRET': ''}):
+                self.assertEqual(self.client.post(path).status_code, 503)
+            with patch.dict(os.environ, {'SUBSCRIPTION_CRON_SECRET': 'correct'}):
+                self.assertEqual(self.client.post(path,
+                    headers={'X-Cron-Secret': 'wrong'}).status_code, 403)
+
+    def test_flutterwave_webhook_requires_configured_hash(self):
+        payload = b'{"event":"charge.completed"}'
+        with patch.dict(os.environ, {'FLW_SECRET_HASH': ''}):
+            self.assertFalse(FlutterwaveService().verify_webhook_signature(
+                payload, 'anything'))
+        with patch.dict(os.environ, {'FLW_SECRET_HASH': 'correct'}):
+            signature = hmac.new(b'correct', payload, hashlib.sha256).hexdigest()
+            service = FlutterwaveService()
+            self.assertTrue(service.verify_webhook_signature(payload, signature))
+            self.assertFalse(service.verify_webhook_signature(payload, 'wrong'))
+
+    def test_correct_secret_runs_cleanup_once(self):
+        with patch.dict(os.environ, {'SUBSCRIPTION_CRON_SECRET': 'correct'}):
+            resp = self.client.post('/api/cron/cleanup',
+                                    headers={'X-Cron-Secret': 'correct'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json['data']['drivers_offline'], 1)
+        self.assertEqual(resp.json['data']['negotiations_cancelled'], 1)
+        db.session.expire_all()
+        self.assertEqual(db.session.get(AdminUser, 1).ready_for_trip, 'No')
+        self.assertEqual(db.session.get(Negotiation, 10).status, 'Cancelled')
+        self.assertEqual(db.session.get(Negotiation, 10).is_active, 'No')
+
+
+if __name__ == '__main__':
+    unittest.main()

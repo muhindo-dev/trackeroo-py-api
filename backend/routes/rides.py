@@ -30,6 +30,7 @@ from backend.models.vehicle import Vehicle
 from backend.models.subscription import Subscription
 from backend.utils.auth import jwt_required_with_user
 from backend.utils.response import success_response, error_response
+from backend.utils.cron_auth import cron_auth_error
 from backend.routes.pricing import _estimate, _resolve_category
 from backend.services.notification_service import notify_user
 
@@ -824,12 +825,9 @@ def dispatch_due():
     Polling from the customer's app does the same thing lazily, but this makes
     it work when nobody has the app open.
     """
-    import os
-    secret = os.getenv('SUBSCRIPTION_CRON_SECRET', '')
-    provided = request.headers.get('X-Cron-Secret') or (
-        request.get_json(silent=True) or {}).get('secret')
-    if secret and provided != secret:
-        return error_response("Forbidden", status_code=403)
+    auth_error = cron_auth_error()
+    if auth_error is not None:
+        return auth_error
 
     cutoff = datetime.utcnow() + timedelta(minutes=LEAD_MINUTES)
     due = RideDispatch.query.filter(

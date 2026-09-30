@@ -1,55 +1,52 @@
-from flask import Blueprint, jsonify
+"""Authenticated background maintenance for live driver and trip state."""
+
 from datetime import datetime, timedelta
+
+from flask import Blueprint, jsonify
+from sqlalchemy import or_
+
 from backend.models import db
-from backend.models.user import AdminUser
 from backend.models.negotiation import Negotiation
+from backend.models.user import AdminUser
+from backend.utils.cron_auth import cron_auth_error
 
 cron_bp = Blueprint('cron', __name__)
 
-@cron_bp.route('/api/cron/cleanup', methods=['POST', 'GET'])
+
+@cron_bp.route('/api/cron/cleanup', methods=['POST'])
 def cleanup():
-    """
-    Automated cleanup tasks:
-    1. Set drivers to Offline if no location update in the last 30 minutes.
-    2. Cancel Active/Accepted/Pending negotiations that haven't been updated in the last 30 minutes.
-    """
+    """Expire stale online drivers and abandoned, unaccepted ride requests."""
+    auth_error = cron_auth_error()
+    if auth_error is not None:
+        return auth_error
+
     try:
-        thirty_mins_ago = datetime.utcnow() - timedelta(minutes=30)
-        
-        # 1. Auto-offline drivers
-        # Drivers who are Online but haven't updated location recently
-        offline_count = AdminUser.query.filter(
-            AdminUser.user_type == 'driver',
-            AdminUser.online_status == 'Online',
-            (AdminUser.last_location_update < thirty_mins_ago) | (AdminUser.last_location_update.is_(None))
+        threshold = datetime.utcnow() - timedelta(minutes=30)
+        drivers_offline = AdminUser.query.filter(
+            AdminUser.user_type == 'Driver',
+            AdminUser.ready_for_trip == 'Yes',
+            or_(
+                AdminUser.location_updated_at < threshold,
+                AdminUser.location_updated_at.is_(None),
+            ),
+        ).update({'ready_for_trip': 'No'}, synchronize_session=False)
+
+        rides_cancelled = Negotiation.query.filter(
+            Negotiation.status == 'Active',
+            Negotiation.updated_at < threshold,
         ).update(
-            {"online_status": "Offline"},
-            synchronize_session=False
+            {'status': 'Cancelled', 'is_active': 'No'},
+            synchronize_session=False,
         )
-        
-        # 2. Auto-cancel inactive negotiations
-        # Negotiations that are Active, Accepted, or Pending and haven't been updated recently
-        cancel_count = Negotiation.query.filter(
-            Negotiation.status.in_(['Active', 'Accepted', 'Pending']),
-            Negotiation.updated_at < thirty_mins_ago
-        ).update(
-            {"status": "Cancelled", "is_active": "No"},
-            synchronize_session=False
-        )
-        
         db.session.commit()
-        
         return jsonify({
-            "status": "success",
-            "message": "Cleanup completed",
-            "drivers_offlined": offline_count,
-            "negotiations_cancelled": cancel_count
+            'code': 1,
+            'message': 'Cleanup complete',
+            'data': {
+                'drivers_offline': drivers_offline,
+                'negotiations_cancelled': rides_cancelled,
+            },
         }), 200
-        
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return jsonify({
-            "status": "error",
-            "message": "Cleanup failed",
-            "error": str(e)
-        }), 500
+        return jsonify({'code': 0, 'message': 'Cleanup failed'}), 500

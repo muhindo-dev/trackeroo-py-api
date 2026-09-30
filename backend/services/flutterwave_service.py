@@ -93,8 +93,7 @@ class FlutterwaveService:
         Flutterwave sends the hash in the 'verificationhash' header.
         """
         if not self._secret_hash:
-            # No hash configured — skip verification (dev mode)
-            return True
+            return False
         computed = hmac.new(
             self._secret_hash.encode('utf-8'),
             payload_bytes,
