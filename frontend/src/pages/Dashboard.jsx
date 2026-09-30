@@ -8,7 +8,7 @@ const TITLES = {
   '/': 'Dashboard',
   '/users': 'Users & Drivers',
   '/trips': 'Trips',
-  '/negotiations': 'Negotiations',
+  '/negotiations': 'Trips',
   '/bookings': 'Scheduled Bookings',
   '/payments': 'Payments',
 };

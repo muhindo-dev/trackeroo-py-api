@@ -23,7 +23,7 @@ import {
 const NAV = [
   { to: '/',              icon: FiHome,          label: 'Dashboard',     end: true },
   { to: '/users',         icon: FiUsers,         label: 'Users & Drivers' },
-  { to: '/negotiations',  icon: FiNavigation,    label: 'Rides' },
+  { to: '/negotiations',  icon: FiNavigation,    label: 'Trips' },
   { to: '/subscriptions', icon: FiAward,         label: 'Subscriptions' },
   { to: '/chats',         icon: FiMessageCircle, label: 'Chats' },
   { to: '/vehicles',      icon: FiTruck,         label: 'Vehicles' },

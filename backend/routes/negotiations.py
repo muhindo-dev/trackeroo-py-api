@@ -166,6 +166,9 @@ def create_legacy(user):
     except (TypeError, ValueError, OverflowError):
         price_cents = 0
 
+    if price_cents and price_cents != int(negotiation.agreed_price or negotiation.initial_price or 0):
+        return error_response("Trip fare is set automatically by Truckfully.")
+
     negotiation = Negotiation(
         customer_id=user.id,
         customer_name=user.name,
@@ -625,6 +628,7 @@ def set_agreed_price(user, neg_id):
 
     if agreed_price <= 0:
         return error_response("Agreed price must be greater than zero")
+    agreed_price = int(negotiation.agreed_price or negotiation.initial_price or agreed_price)
 
     negotiation.agreed_price = agreed_price
     db.session.commit()

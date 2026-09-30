@@ -143,7 +143,7 @@ function NegDrawer({ neg, onClose, onSaved, onAction }) {
     <div className="drawer-overlay">
       <div className="drawer-panel" style={{ width: 900, maxWidth: '96vw' }} onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
-          <h2>Negotiation #{neg.id}</h2>
+          <h2>Trip #{neg.id}</h2>
           <span className={`badge badge-${neg.status?.toLowerCase()}`}>{neg.status}</span>
           {dirty && (
             <span style={{ fontSize: 11, fontWeight: 700, color: '#8a6100', background: '#fff3d6', border: '1px solid #f0d492', padding: '3px 8px', marginLeft: 8 }}>UNSAVED</span>
@@ -261,7 +261,7 @@ function NegDrawer({ neg, onClose, onSaved, onAction }) {
               </div>
               <div style={{ marginTop: 14 }}>
                 <button className="btn btn-sm btn-danger" disabled={saving || neg.status === 'Cancelled'}
-                  onClick={() => onAction(neg.id, 'cancel')}><FiXCircle /> Cancel negotiation</button>
+                  onClick={() => onAction(neg.id, 'cancel')}><FiXCircle /> Cancel trip</button>
               </div>
             </div>
           )}
@@ -402,7 +402,7 @@ export default function NegotiationsPage() {
           <button type="submit" className="btn btn-sm">Search</button>
           {search && <button type="button" className="btn btn-sm" onClick={() => patchParams({ q: '', page: 1 })}>Clear</button>}
         </form>
-        <span className="toolbar-info">{total} negotiations</span>
+        <span className="toolbar-info">{total} trips</span>
         <button className="btn btn-sm" onClick={() => load(page, search, filter, payFilter)} title="Reload"><FiRefreshCw /></button>
       </div>
 
@@ -437,12 +437,12 @@ export default function NegotiationsPage() {
                     <button className="btn btn-xs" title="View / manage" onClick={() => openDetail(n)}><FiEye /></button>
                     {!['Completed', 'Cancelled'].includes(n.status) && (
                       <button className="btn btn-xs btn-danger" title="Cancel"
-                        onClick={() => setConfirm({ id: n.id, action: 'cancel', msg: `Cancel negotiation #${n.id}?` })}><FiXCircle /></button>
+                        onClick={() => setConfirm({ id: n.id, action: 'cancel', msg: `Cancel trip #${n.id}?` })}><FiXCircle /></button>
                     )}
                   </td>
                 </tr>
               ))}
-              {!items.length && <tr><td colSpan="9" className="empty-state">No negotiations found</td></tr>}
+              {!items.length && <tr><td colSpan="9" className="empty-state">No trips found</td></tr>}
             </tbody>
           </table>
         </div>

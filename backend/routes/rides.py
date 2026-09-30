@@ -383,8 +383,7 @@ def request_ride(user):
     # The system price is a STARTING POINT, not a verdict. The customer may
     # send a different figure, and the driver may counter it — nothing is
     # binding until both sides accept in the negotiation chat.
-    raw_price = data.get('proposed_price')
-    price = suggested if raw_price in (None, '') else _num(raw_price)
+    price = suggested
     if not math.isfinite(price) or price <= 0:
         return error_response("Enter a fare to propose.")
 
@@ -417,7 +416,7 @@ def request_ride(user):
         initial_price=_price_cents(price),      # the customer's opening offer
         # Deliberately unset: a price only becomes "agreed" when both sides
         # have accepted it in the negotiation.
-        agreed_price=None,
+        agreed_price=_price_cents(price),
         status='Scheduled' if scheduled_at else 'Active',
         is_active='Yes',
         customer_accepted='Accepted', customer_driver='Pending',
@@ -439,7 +438,7 @@ def request_ride(user):
         first_negotiator_id=user.id,
         last_negotiator_id=user.id,
         price=_price_cents(price),
-        price_accepted='No',
+        price_accepted='Yes',
         message_type='Negotiation',
         message_body=(data.get('note') or '').strip()[:500] or None,
     ))
@@ -635,17 +634,11 @@ def respond(user, ride_id):
         # differ only in whether the price is settled: "accept" takes the
         # customer's figure as agreed, "negotiate" leaves it open.
         negotiation.status = 'Accepted'
-        negotiation.customer_driver = 'Accepted' if action == 'accept' else 'Pending'
+        negotiation.customer_driver = 'Accepted'
         negotiation.is_active = 'Yes'
         dispatch.status = 'matched'
 
-        if action == 'accept':
-            from backend.models.negotiation_record import NegotiationRecord
-            last = (NegotiationRecord.query
-                    .filter_by(negotiation_id=negotiation.id)
-                    .order_by(NegotiationRecord.id.desc()).first())
-            negotiation.agreed_price = (
-                last.price if last and last.price else negotiation.initial_price)
+        negotiation.agreed_price = negotiation.initial_price
         user.busy_until = datetime.utcnow() + timedelta(minutes=90)
         db.session.commit()
         try:
@@ -655,7 +648,7 @@ def respond(user, ride_id):
         except Exception:
             pass
         return success_response(
-            "Ride accepted" if action == 'accept' else "Opening negotiation",
+            "Trip accepted",
             _status_payload(negotiation, dispatch))
 
     # decline → advance to next candidate
@@ -1225,35 +1218,7 @@ def negotiation_act(user, ride_id):
     is_driver = user.id == n.driver_id
 
     if action == 'offer':
-        amount = _num(data.get('price'))
-        if not math.isfinite(amount) or amount <= 0:
-            return error_response("Enter an amount to offer.")
-        db.session.add(NegotiationRecord(
-            negotiation_id=n.id, customer_id=n.customer_id,
-            driver_id=n.driver_id or 0,
-            last_negotiator_id=user.id,
-            first_negotiator_id=n.customer_id or user.id,
-            price=_price_cents(amount), price_accepted='No',
-            message_type='Negotiation',
-            message_body=(data.get('body') or '').strip()[:500] or None,
-        ))
-        # A new figure reopens the question for BOTH sides.
-        n.agreed_price = None
-        if is_driver:
-            n.customer_driver = 'Accepted'
-            n.customer_accepted = 'Pending'
-        else:
-            n.customer_accepted = 'Accepted'
-            n.customer_driver = 'Pending'
-        db.session.commit()
-        try:
-            notify_user(n.customer_id if is_driver else n.driver_id,
-                        "New price offer",
-                        f"₦{int(amount):,} proposed for your trip.",
-                        {'type': 'ride_offer_price', 'negotiation_id': n.id})
-        except Exception:
-            pass
-        return success_response("Offer sent", _neg_price_state(n))
+        return error_response("Trip fare is set automatically by Truckfully.")
 
     if action == 'accept':
         state = _neg_price_state(n)
