@@ -140,6 +140,10 @@ def register():
     db.session.add(user)
     db.session.flush()
 
+    if account_type == 'Driver':
+        from backend.services.grace_period_service import apply_grace
+        apply_grace(user)
+
     # Vehicle Owner who is a Company: create a Company record and link it.
     if account_type == 'VehicleOwner' and (data.get('owner_kind') == 'Company'):
         company_name = (data.get('company_name') or '').strip()

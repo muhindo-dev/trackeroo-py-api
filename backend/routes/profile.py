@@ -150,6 +150,8 @@ def become_driver(user):
     # Don't allow Admin/Super Admin accounts to be demoted to Pending Driver
     if user.user_type not in ('Admin', 'Super Admin'):
         user.user_type = 'Pending Driver'
+        from backend.services.grace_period_service import apply_grace
+        apply_grace(user, existing=True)
 
     # Standard profile fields that exist in DB
     for field in ('first_name', 'last_name', 'date_of_birth', 'sex'):

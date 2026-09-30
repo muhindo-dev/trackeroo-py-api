@@ -11,6 +11,8 @@ from flask import Blueprint, request, current_app
 
 from backend.models import db
 from backend.models.subscription import SubscriptionPlan, Subscription
+from backend.models.grace_policy import DriverGracePolicy
+from backend.services.grace_period_service import active_policy, offer_dict, apply_grace
 from backend.utils.auth import jwt_required_with_user, admin_required
 from backend.utils.response import success_response, error_response
 from backend.services.flutterwave_service import (
@@ -33,11 +35,72 @@ def status(user):
     latest = Subscription.query.filter_by(driver_id=user.id).order_by(
         Subscription.created_at.desc()
     ).first()
+    policy = active_policy(existing=user.user_type in ('Pending Driver', 'Driver'))
     return success_response("Subscription status", {
         'is_subscribed': active is not None,
         'active': active.to_dict() if active else None,
         'latest': latest.to_dict() if latest else None,
+        'grace_offer': offer_dict(policy),
     })
+
+
+@subscriptions_bp.route('/api/driver-grace-offer', methods=['GET'])
+def grace_offer():
+    return success_response("Driver grace offer", offer_dict(active_policy()))
+
+
+@subscriptions_bp.route('/api/admin/subscription-grace-policies', methods=['GET'])
+@admin_required
+def grace_policies(user):
+    return success_response("Driver grace policies", [p.to_dict() for p in DriverGracePolicy.query.order_by(DriverGracePolicy.created_at.desc()).all()])
+
+
+@subscriptions_bp.route('/api/admin/subscription-grace-policies', methods=['POST'])
+@admin_required
+def create_grace_policy(user):
+    data = request.get_json(silent=True) or {}
+    try:
+        from dateutil.parser import parse
+        start_at, end_at = parse(data['start_at']), parse(data['end_at'])
+        if end_at <= start_at: raise ValueError('end_at must be after start_at')
+        plan = db.session.get(SubscriptionPlan, int(data['plan_id']))
+        if not plan: raise ValueError('Invalid subscription plan')
+        p = DriverGracePolicy(name=(data.get('name') or 'New driver offer').strip(), plan_id=plan.id,
+            start_at=start_at, end_at=end_at, duration_days=max(int(data.get('duration_days') or plan.duration_days or 7), 1),
+            apply_to_new_drivers=1 if data.get('apply_to_new_drivers', True) else 0,
+            apply_to_existing=1 if data.get('apply_to_existing', False) else 0,
+            max_redemptions=int(data['max_redemptions']) if data.get('max_redemptions') else None,
+            is_active=1 if data.get('is_active', True) else 0, notes=data.get('notes'), created_by=user.id)
+        db.session.add(p); db.session.commit()
+        return success_response("Grace policy created", p.to_dict(), status_code=201)
+    except (KeyError, TypeError, ValueError) as exc:
+        db.session.rollback(); return error_response(str(exc), 422)
+
+
+@subscriptions_bp.route('/api/admin/subscription-grace-policies/<int:policy_id>', methods=['PUT'])
+@admin_required
+def update_grace_policy(user, policy_id):
+    p = db.session.get(DriverGracePolicy, policy_id)
+    if not p: return error_response('Grace policy not found', 404)
+    data = request.get_json(silent=True) or {}
+    for key in ('name', 'notes'):
+        if key in data: setattr(p, key, data[key])
+    for key in ('apply_to_new_drivers', 'apply_to_existing', 'is_active'):
+        if key in data: setattr(p, key, 1 if data[key] else 0)
+    if 'duration_days' in data: p.duration_days = max(int(data['duration_days']), 1)
+    db.session.commit(); return success_response("Grace policy updated", p.to_dict())
+
+
+@subscriptions_bp.route('/api/admin/subscription-grace-policies/<int:policy_id>/apply-existing', methods=['POST'])
+@admin_required
+def apply_existing_grace(user, policy_id):
+    p = db.session.get(DriverGracePolicy, policy_id)
+    if not p: return error_response('Grace policy not found', 404)
+    from backend.models.user import AdminUser
+    count = 0
+    for driver in AdminUser.query.filter_by(user_type='Pending Driver').all():
+        if apply_grace(driver, existing=True): count += 1
+    db.session.commit(); return success_response("Grace offer applied to pending drivers", {'applied': count})
 
 
 @subscriptions_bp.route('/api/admin/subscriptions', methods=['GET'])

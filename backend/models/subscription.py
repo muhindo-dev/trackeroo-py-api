@@ -61,6 +61,8 @@ class Subscription(db.Model):
     status = db.Column(db.String(20), default='pending')
     start_at = db.Column(db.DateTime, nullable=True)
     end_at = db.Column(db.DateTime, nullable=True)
+    grace_policy_id = db.Column(db.BigInteger, nullable=True)
+    is_grace = db.Column(db.SmallInteger, default=0)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -128,6 +130,8 @@ class Subscription(db.Model):
             'is_active_now': self.is_active_now,
             'start_at': self.start_at.isoformat() if self.start_at else None,
             'end_at': self.end_at.isoformat() if self.end_at else None,
+            'is_grace': bool(self.is_grace),
+            'grace_policy_id': self.grace_policy_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
