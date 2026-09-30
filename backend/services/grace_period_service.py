@@ -25,6 +25,10 @@ def offer_dict(policy):
 
 def apply_grace(driver, existing=False, policy=None):
     policy = policy or active_policy(existing=existing)
+    if policy:
+        # Serialize redemptions against this policy so its cap cannot be
+        # exceeded by two signups arriving at the same time.
+        policy = DriverGracePolicy.query.filter_by(id=policy.id).with_for_update().first()
     # A driver can redeem one policy only once, including after expiry.
     if not policy or Subscription.query.filter_by(driver_id=driver.id, grace_policy_id=policy.id).first():
         return None

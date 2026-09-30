@@ -70,11 +70,16 @@ def create_grace_policy(user):
         if end_at <= start_at: raise ValueError('end_at must be after start_at')
         plan = db.session.get(SubscriptionPlan, int(data['plan_id']))
         if not plan: raise ValueError('Invalid subscription plan')
+        apply_new = bool(data.get('apply_to_new_drivers', True))
+        apply_existing = bool(data.get('apply_to_existing', False))
+        if not (apply_new or apply_existing): raise ValueError('Select at least one eligible driver group')
+        max_redemptions = int(data['max_redemptions']) if data.get('max_redemptions') not in (None, '') else None
+        if max_redemptions is not None and max_redemptions < 1: raise ValueError('max_redemptions must be at least 1')
         p = DriverGracePolicy(name=(data.get('name') or 'New driver offer').strip(), plan_id=plan.id,
             start_at=start_at, end_at=end_at, duration_days=max(int(data.get('duration_days') or plan.duration_days or 7), 1),
-            apply_to_new_drivers=1 if data.get('apply_to_new_drivers', True) else 0,
-            apply_to_existing=1 if data.get('apply_to_existing', False) else 0,
-            max_redemptions=int(data['max_redemptions']) if data.get('max_redemptions') else None,
+            apply_to_new_drivers=1 if apply_new else 0,
+            apply_to_existing=1 if apply_existing else 0,
+            max_redemptions=max_redemptions,
             is_active=1 if data.get('is_active', True) else 0, notes=data.get('notes'), created_by=user.id)
         db.session.add(p)
         db.session.flush()
@@ -116,6 +121,8 @@ def update_grace_policy(user, policy_id):
         if key in data: setattr(p, key, data[key])
     for key in ('apply_to_new_drivers', 'apply_to_existing', 'is_active'):
         if key in data: setattr(p, key, 1 if data[key] else 0)
+    if not (p.apply_to_new_drivers or p.apply_to_existing):
+        db.session.rollback(); return error_response('Select at least one eligible driver group', 422)
     if 'name' in data: p.name = str(data['name']).strip()
     if 'notes' in data: p.notes = data['notes']
     db.session.flush()
