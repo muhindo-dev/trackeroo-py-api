@@ -31,11 +31,40 @@ def list_plans():
 @subscriptions_bp.route('/api/subscriptions/status', methods=['GET'])
 @jwt_required_with_user
 def status(user):
+    # Signup and "become driver" both attempt the grant, but a status refresh
+    # is also a safe repair point for accounts created while a policy was
+    # active. apply_grace is idempotent per driver/policy, and the eligibility
+    # group is derived from the account's original registration type so an old
+    # driver cannot consume a new-driver offer.
+    policy = None
+    registered_as_driver = (getattr(user, 'account_type', '') or '').strip().lower() == 'driver'
+    is_driver = registered_as_driver or user.user_type in ('Pending Driver', 'Driver')
+    can_receive_grace = is_driver and Subscription.active_for_driver(user.id) is None
+    if can_receive_grace and registered_as_driver:
+        candidate = active_policy(existing=False)
+        created_at = getattr(user, 'created_at', None)
+        now = datetime.utcnow()
+        if candidate and created_at and candidate.start_at <= created_at <= min(candidate.end_at, now):
+            policy = candidate
+            apply_grace(user, existing=False, policy=policy)
+        else:
+            # Drivers who existed before the signup window are covered only
+            # when the admin explicitly enabled the existing-driver audience.
+            existing_policy = active_policy(existing=True)
+            if existing_policy and created_at and created_at < existing_policy.start_at:
+                policy = existing_policy
+                apply_grace(user, existing=True, policy=policy)
+    elif can_receive_grace:
+        policy = active_policy(existing=True)
+        if policy:
+            apply_grace(user, existing=True, policy=policy)
+    if policy:
+        db.session.commit()
+
     active = Subscription.active_for_driver(user.id)
     latest = Subscription.query.filter_by(driver_id=user.id).order_by(
         Subscription.created_at.desc()
     ).first()
-    policy = active_policy(existing=user.user_type in ('Pending Driver', 'Driver'))
     return success_response("Subscription status", {
         'is_subscribed': active is not None,
         'active': active.to_dict() if active else None,
