@@ -498,7 +498,11 @@ def transfer_status(user):
 @flutterwave_bp.route('/api/flutterwave/transfer-callback', methods=['POST'])
 def transfer_callback():
     """Flutterwave transfer callback (payout status update)."""
-    data = request.get_json(silent=True) or request.form or {}
+    payload_bytes = request.get_data()
+    signature = request.headers.get('verificationhash', '')
+    if not get_flutterwave().verify_webhook_signature(payload_bytes, signature):
+        return error_response("Invalid webhook signature", status_code=401)
+    data = request.get_json(silent=True) or {}
     _handle_transfer_completed(data)
     return {'status': 'ok'}, 200
 

@@ -17,6 +17,7 @@ from backend.models.user import AdminUser
 from backend.routes.cron import cron_bp
 from backend.routes.rides import rides_bp
 from backend.routes.subscriptions import subscriptions_bp
+from backend.routes.flutterwave import flutterwave_bp
 from backend.services.flutterwave_service import FlutterwaveService
 
 
@@ -97,6 +98,26 @@ class CleanupCronTests(unittest.TestCase):
         self.assertEqual(db.session.get(AdminUser, 1).ready_for_trip, 'No')
         self.assertEqual(db.session.get(Negotiation, 10).status, 'Cancelled')
         self.assertEqual(db.session.get(Negotiation, 10).is_active, 'No')
+
+
+class TransferCallbackAuthTests(unittest.TestCase):
+    def test_callback_rejects_unsigned_and_accepts_signed_payload(self):
+        app = Flask(__name__)
+        app.config['TESTING'] = True
+        app.register_blueprint(flutterwave_bp)
+        client = app.test_client()
+        payload = b'{"id":"123","status":"SUCCESSFUL"}'
+        with patch.dict(os.environ, {'FLW_SECRET_HASH': 'callback-secret'}), patch(
+            'backend.routes.flutterwave._handle_transfer_completed'
+        ) as handler:
+            self.assertEqual(client.post('/api/flutterwave/transfer-callback',
+                                         data=payload, content_type='application/json').status_code, 401)
+            handler.assert_not_called()
+            signature = hmac.new(b'callback-secret', payload, hashlib.sha256).hexdigest()
+            self.assertEqual(client.post('/api/flutterwave/transfer-callback',
+                                         data=payload, content_type='application/json',
+                                         headers={'verificationhash': signature}).status_code, 200)
+            handler.assert_called_once()
 
 
 if __name__ == '__main__':
