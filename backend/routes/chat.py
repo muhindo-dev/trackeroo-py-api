@@ -139,6 +139,11 @@ def send_message(user):
         return error_response("Conversation not found", status_code=404)
     if not _in_thread(head, user.id):
         return error_response("This is not your conversation", status_code=403)
+    other_participant = (
+        head.customer_id if head.product_owner_id == user.id else head.product_owner_id
+    )
+    if receiver_pk != other_participant:
+        return error_response("Receiver is not in this conversation", status_code=403)
 
     receiver = AdminUser.query.get(receiver_pk)
 
