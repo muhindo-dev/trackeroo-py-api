@@ -19,6 +19,7 @@ const VehicleCategoriesPage = lazy(() => import('./components/VehicleCategoriesP
 const PricingParametersPage = lazy(() => import('./components/PricingParametersPage'));
 const VehiclesPage          = lazy(() => import('./components/VehiclesPage'));
 const SubscriptionsPage     = lazy(() => import('./components/SubscriptionsPage'));
+const GraceOffersPage       = lazy(() => import('./components/GraceOffersPage'));
 
 const Loader = () => <div className="page-loader">Loading…</div>;
 
@@ -54,6 +55,7 @@ function AppRoutes() {
         <Route path="pricing" element={<Suspense fallback={<Loader />}><PricingParametersPage /></Suspense>} />
         <Route path="vehicles" element={<Suspense fallback={<Loader />}><VehiclesPage /></Suspense>} />
         <Route path="subscriptions" element={<Suspense fallback={<Loader />}><SubscriptionsPage /></Suspense>} />
+        <Route path="grace-offers" element={<Suspense fallback={<Loader />}><GraceOffersPage /></Suspense>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

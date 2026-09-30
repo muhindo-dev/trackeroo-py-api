@@ -88,6 +88,17 @@ def update_grace_policy(user, policy_id):
     p = db.session.get(DriverGracePolicy, policy_id)
     if not p: return error_response('Grace policy not found', 404)
     data = request.get_json(silent=True) or {}
+    try:
+        if 'plan_id' in data:
+            plan = db.session.get(SubscriptionPlan, int(data['plan_id']))
+            if not plan: return error_response('Invalid subscription plan', 422)
+            p.plan_id = plan.id
+        if 'start_at' in data: p.start_at = datetime.fromisoformat(str(data['start_at']).replace('Z', '+00:00')).replace(tzinfo=None)
+        if 'end_at' in data: p.end_at = datetime.fromisoformat(str(data['end_at']).replace('Z', '+00:00')).replace(tzinfo=None)
+        if p.end_at <= p.start_at: return error_response('End date must be after start date', 422)
+        if 'max_redemptions' in data: p.max_redemptions = int(data['max_redemptions']) if data['max_redemptions'] else None
+    except (TypeError, ValueError) as exc:
+        return error_response(f'Invalid policy value: {exc}', 422)
     for key in ('name', 'notes'):
         if key in data: setattr(p, key, data[key])
     for key in ('apply_to_new_drivers', 'apply_to_existing', 'is_active'):
