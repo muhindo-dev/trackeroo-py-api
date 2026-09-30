@@ -23,9 +23,16 @@ def route_stages(user):
 @resources_bp.route('/api/drivers', methods=['GET'])
 @jwt_required_with_user
 def drivers(user):
-    """Get all active drivers."""
+    """Get public driver cards without KYC, contact or live location data."""
     drivers = AdminUser.query.filter_by(user_type='Driver', status=1).all()
-    return success_response("Success", [d.to_dict() for d in drivers])
+    return success_response("Success", [{
+        'id': d.id,
+        'name': d.name,
+        'avatar': d.avatar,
+        'rating': float(d.rating) if d.rating else None,
+        'vehicle_type': d.vehicle_type,
+        'approved_groups': d.approved_groups,
+    } for d in drivers])
 
 
 @resources_bp.route('/api/saccos', methods=['GET'])
@@ -196,6 +203,11 @@ def dynamic_model(user, model_name):
     model_cls = allowed_models.get(model_name)
     if not model_cls:
         return error_response("Model not found")
+
+    if model_cls in (AdminUser, Trip, TripBooking) and user.user_type not in (
+        'Admin', 'Super Admin'
+    ):
+        return error_response("Admin access required", status_code=403)
 
     q = model_cls.query
 
