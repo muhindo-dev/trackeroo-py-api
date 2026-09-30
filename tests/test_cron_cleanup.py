@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import unittest
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from flask import Flask
@@ -118,6 +119,24 @@ class TransferCallbackAuthTests(unittest.TestCase):
                                          data=payload, content_type='application/json',
                                          headers={'verificationhash': signature}).status_code, 200)
             handler.assert_called_once()
+
+    def test_transfer_status_does_not_disclose_another_drivers_payout(self):
+        app = Flask(__name__)
+        app.config['TESTING'] = True
+        app.register_blueprint(flutterwave_bp)
+        with patch('backend.utils.auth.get_current_user', return_value=SimpleNamespace(
+            id=2, user_type='Driver'
+        )), patch('backend.routes.flutterwave.PayoutRequest') as payout_model, patch(
+            'backend.routes.flutterwave.get_flutterwave'
+        ) as provider:
+            payout_model.query.filter_by.return_value.first.return_value = SimpleNamespace(
+                user_id=3
+            )
+            response = app.test_client().get(
+                '/api/flutterwave/transfer-status?flw_transfer_id=other-driver-transfer'
+            )
+            self.assertEqual(response.status_code, 404)
+            provider.assert_not_called()
 
 
 if __name__ == '__main__':

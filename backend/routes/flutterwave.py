@@ -417,9 +417,9 @@ def initiate_payout(user):
     """Admin or driver initiates a payout withdrawal.
 
     Body: { payout_request_id }
-    Only admin (id=1) can trigger payouts.
+    Only an administrator can trigger payouts.
     """
-    if user.id != 1:
+    if user.user_type not in ('Admin', 'Super Admin'):
         return error_response("Admin only", status_code=403)
 
     data = request.get_json(silent=True) or request.form or {}
@@ -486,6 +486,11 @@ def transfer_status(user):
     flw_transfer_id = request.args.get('flw_transfer_id', '')
     if not flw_transfer_id:
         return error_response("flw_transfer_id is required")
+
+    payout = PayoutRequest.query.filter_by(flw_transfer_id=flw_transfer_id).first()
+    if not payout or (payout.user_id != user.id and
+                      user.user_type not in ('Admin', 'Super Admin')):
+        return error_response("Payout request not found", status_code=404)
 
     flw = get_flutterwave()
     try:
