@@ -45,19 +45,22 @@ def status(user):
         created_at = getattr(user, 'created_at', None)
         now = datetime.utcnow()
         if candidate and created_at and candidate.start_at <= created_at <= min(candidate.end_at, now):
-            policy = candidate
-            apply_grace(user, existing=False, policy=policy)
+            if not Subscription.query.filter_by(driver_id=user.id, grace_policy_id=candidate.id).first():
+                if apply_grace(user, existing=False, policy=candidate):
+                    policy = candidate
         else:
             # Drivers who existed before the signup window are covered only
             # when the admin explicitly enabled the existing-driver audience.
             existing_policy = active_policy(existing=True)
             if existing_policy and created_at and created_at < existing_policy.start_at:
-                policy = existing_policy
-                apply_grace(user, existing=True, policy=policy)
+                if not Subscription.query.filter_by(driver_id=user.id, grace_policy_id=existing_policy.id).first():
+                    if apply_grace(user, existing=True, policy=existing_policy):
+                        policy = existing_policy
     elif can_receive_grace:
-        policy = active_policy(existing=True)
-        if policy:
-            apply_grace(user, existing=True, policy=policy)
+        candidate = active_policy(existing=True)
+        if candidate and not Subscription.query.filter_by(driver_id=user.id, grace_policy_id=candidate.id).first():
+            if apply_grace(user, existing=True, policy=candidate):
+                policy = candidate
     if policy:
         db.session.commit()
 
